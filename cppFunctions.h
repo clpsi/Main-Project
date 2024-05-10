@@ -10,12 +10,12 @@
 #include "cppFunctions.generated.h"
 
 
-UCLASS()
+UCLASS(BlueprintType)
 class BETA_API UcppFunctions : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
 public:
     UFUNCTION(BlueprintCallable)
-    static bool test(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits, UWorld* World);
+    bool test(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits);
 };

@@ -9,13 +9,18 @@
 #include "CollisionQueryParams.h"
 #include "Components/PrimitiveComponent.h"
 
-bool UcppFunctions::test(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits, UWorld* World)
+bool UcppFunctions::test(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits)
 {
+    UWorld* CurrentWorld = ComponentToSweep->GetOwner()->GetWorld();
+    if (!CurrentWorld) {
+        GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Didn't find World"));
+        return false;
+    }
 
     FComponentQueryParams ComponentQueryParams;
 
     //ComponentQueryParams.AddIgnoredActor(ActorToIgnore);
-    bool bHit = World->ComponentSweepMulti(
+    bool bHit = CurrentWorld->ComponentSweepMulti(
         OutHits,
         ComponentToSweep,
         Start,
