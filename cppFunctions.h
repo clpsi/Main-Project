@@ -17,5 +17,5 @@ class BETA_API UcppFunctions : public UBlueprintFunctionLibrary
 
 public:
     UFUNCTION(BlueprintCallable)
-    bool SweepComponent(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits);
+    static bool SweepComponent(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, TArray<FHitResult>& OutHits);
 };
