@@ -25,7 +25,7 @@ class MANN_N_MASCHINE_API UcppFunctions : public UBlueprintFunctionLibrary
 	
 public:
 	UFUNCTION(BlueprintCallable)
-	static void MyGetTrianglesInPolygroup(UDynamicMeshComponent* DynamicMeshComp, int32 TriangleID, TArray<int32>& OutTriangleIndices, TArray<int32>& OutVertexIndices);
+	static bool CopyPolygroupToMesh(UDynamicMeshComponent* InputMeshComp, UDynamicMeshComponent* TargetMesh, int32 Polygroup);
 	UFUNCTION(BlueprintCallable)
 	static bool SweepComponent(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, ECollisionChannel TraceChannel, TArray<FHitResult>& OutHits);
 };
