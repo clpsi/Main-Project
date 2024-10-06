@@ -1,21 +1,32 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "cppFunctions.h"
-#include "Polygroups/PolygroupSet.h"
+
 #include "Components/DynamicMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+
+#include "UDynamicMesh.h"
 #include "DynamicMesh/DynamicAttribute.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/DynamicMesh3.h"
+
+#include "Polygroups/PolygroupSet.h"
 #include "Polygroups/PolygroupsGenerator.h"
+
 #include "GeometryScript/MeshPolygroupFunctions.h"
-#include "UDynamicMesh.h"
 #include "GeometryScript/GeometryScriptTypes.h"
-#include "IndexTypes.h"
+
+#include "Engine/StaticMesh.h"
+
+#include "GameFramework/Actor.h"
 #include "Engine/GameEngine.h"
+#include "Engine/World.h"
 
 #include <DocObj.h>
-#include "Engine/World.h"
+#include "IndexTypes.h"
+
 #include "Math/Quat.h"
+#include "Math/Vector.h"
 #include "Containers/Array.h"
 #include "CollisionQueryParams.h"
 #include "Components/PrimitiveComponent.h"
@@ -118,4 +129,230 @@ bool UcppFunctions::SweepComponent(UPrimitiveComponent* ComponentToSweep, const 
     );
 
     return bHit;
+}
+
+bool UcppFunctions::TraceFromInsideMesh(AActor* ActorToIgnore, bool ShouldIgnore, const FVector& Start, const FVector& End, FHitResult& OutHit)
+{
+    // Set up the collision query parameters
+    FCollisionQueryParams TraceParams(FName(TEXT("EdgeTrace")), true);
+    TraceParams.bReturnPhysicalMaterial = false;
+    TraceParams.bFindInitialOverlaps = false; // Ignore the initial overlap
+    if (ShouldIgnore) 
+    {
+        TraceParams.AddIgnoredActor(ActorToIgnore);
+    } 
+
+    // Perform the line trace
+    bool bHit = ActorToIgnore->GetWorld()->LineTraceSingleByChannel(
+        OutHit,
+        Start,
+        End,
+        ECC_Visibility, // Use the appropriate collision channel
+        TraceParams
+    );
+
+    // Draw debug line to visualize the trace (optional)
+        FColor LineColor = bHit ? FColor::Red : FColor::Green;
+        DrawDebugLine(ActorToIgnore->GetWorld(), Start, End, FColor::Yellow, false, 2.0f, 0, 2.0f);
+        if (bHit)
+        {
+            DrawDebugPoint(ActorToIgnore->GetWorld(), OutHit.ImpactPoint, 10.0f, FColor::Blue, false, 2.0f);
+        }
+
+    return bHit;
+}
+
+void UcppFunctions::EnableDoubleSidedGeometry(UDynamicMeshComponent* InputMesh)
+{
+    if (InputMesh)
+    {
+        FDynamicMesh3* Mesh = InputMesh->GetMesh();
+        if (Mesh)
+        {
+            // Duplicate each triangle and reverse the vertex order to create a double-sided effect
+            for (int32 TID = 0; TID < Mesh->MaxTriangleID(); ++TID)
+            {
+                if (Mesh->IsTriangle(TID))
+                {
+                    FIndex3i Triangle = Mesh->GetTriangle(TID);
+
+                    // Add a new triangle with reversed vertex order
+                    Mesh->AppendTriangle(Triangle.C, Triangle.B, Triangle.A);
+                }
+            }
+
+            // Update the mesh to include the new triangles
+            InputMesh->NotifyMeshUpdated();
+
+            //Has No collision
+            //DynamicMeshComponent->UpdateCollision();
+        }
+    }
+}
+
+void UcppFunctions::FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshComponent)
+{
+    if (!MeshComponent)
+    {
+        return;
+    }
+
+    FDynamicMesh3& Mesh = MeshComponent->GetMesh();
+
+    // Ensure the mesh has valid triangles
+    if (Mesh.TriangleCount() == 0)
+    {
+        return;
+    }
+
+    // Create an editor for the dynamic mesh
+    FDynamicMeshEditor Editor(&Mesh);
+
+    // Fill all holes in the mesh
+    Editor.FillAllHoles();
+
+    // Update the mesh after modification
+    MeshComponent->NotifyMeshUpdated();
+}
+
+void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygroup, float Amount, int32 xAmount, int32 yAmount)
+{
+    if (InputMesh)
+    {
+        FPolygroupLayer InputGroupLayer;
+        InputGroupLayer.bIsDefaultLayer = true;
+        FDynamicMesh3* Mesh = InputMesh->GetMesh();
+
+        if (InputGroupLayer.CheckExists(Mesh) == false)
+        {
+            UE_LOG(LogBlueprintUserMessages, Log, TEXT("Failed"));
+        }
+
+        TArray<FVector3d> TriangleNormals;
+
+        FPolygroupSet Groups(Mesh, InputGroupLayer);
+        TArray<int32> VertexIndices;
+
+        for (int32 TriangleID = 0; TriangleID < Mesh->MaxTriangleID(); ++TriangleID)
+        {
+            if (Mesh->IsTriangle(TriangleID))
+            {
+                FVector3d Normal = Mesh->GetTriNormal(TriangleID);
+                TriangleNormals.Add(Normal);
+
+                if (Groups.GetGroup(TriangleID) == Polygroup)
+                {
+                    FIndex3i UniqueVertices = Mesh->GetTriangle(TriangleID);
+                    VertexIndices.AddUnique(UniqueVertices.A);
+                    VertexIndices.AddUnique(UniqueVertices.B);
+                    VertexIndices.AddUnique(UniqueVertices.C);
+                }
+            }
+        }
+
+        FVector3d NormalSum(0, 0, 0);
+
+        for (const FVector3d& Normal : TriangleNormals)
+        {
+            NormalSum += Normal;
+        }
+
+        FVector3d AverageNormal(0, 0, 0);
+
+        if (TriangleNormals.Num() > 0)
+        {
+            AverageNormal = NormalSum / static_cast<double>(TriangleNormals.Num());
+        }
+
+        AverageNormal.Normalize();
+        FVector3d NormalizedVector = AverageNormal.GetSafeNormal(); //Plane Normal
+        // Choose an arbitrary vector that is not parallel to NormalVector
+        FVector3d ArbitraryVector;
+        if (FMath::Abs(NormalizedVector.X) < 0.99)
+        {
+            ArbitraryVector = FVector3d(1, 0, 0); // X-axis
+        }
+        else
+        {
+            ArbitraryVector = FVector3d(0, 1, 0); // Y-axis
+        }
+
+        // Compute the first orthogonal vector using the cross product
+        FVector3d VX = FVector3d::CrossProduct(NormalizedVector, ArbitraryVector);
+        VX.Normalize();
+
+        // Compute the second orthogonal vector using the cross product again
+        FVector3d VY = FVector3d::CrossProduct(NormalizedVector, VX);
+        VY.Normalize();
+
+        TArray<FVector2D> ProjectedVertices;
+        FVector2D maxX = FVector2D(-100000.0f, -100000.0f);
+        int32 maxIndex = -1;
+        FVector2D minX = FVector2D(100000.0f, 100000.0f);
+        int32 minIndex = -1;
+        FVector2D maxY = FVector2D(-100000.0f, -100000.0f);
+        int32 mayIndex = -1;
+        FVector2D minY = FVector2D(100000.0f, 100000.0f);
+        int32 miyIndex = -1;
+        
+        for (int32 VertexIndex : VertexIndices)
+        {
+            FVector3d VertexPosition = Mesh->GetVertex(VertexIndex);
+
+            // Calculate the distance from the vertex to the plane along the normal
+            float Distance = FVector3d::DotProduct(VertexPosition, NormalizedVector);
+
+            // Calculate the projection of the vertex onto the plane
+            FVector3d ProjectedVertex = VertexPosition - (Distance * NormalizedVector);
+
+            // Calculate the local 2D coordinates in the plane's coordinate system
+            float X = FVector3d::DotProduct(ProjectedVertex, VX);
+            float Y = FVector3d::DotProduct(ProjectedVertex, VY);
+            ProjectedVertices.Push(FVector2D(X, Y));
+            
+            if (xAmount != 0) 
+            {
+                if (X < minX.X)
+                {
+                    minX = FVector2D(X, Y);
+                    minIndex = VertexIndex;
+                }
+                else if (X > maxX.X)
+                {
+                    maxX = FVector2D(X, Y);
+                    maxIndex = VertexIndex;
+                }
+            }
+            if (yAmount != 0)
+            {
+                if (Y < minY.Y)
+                {
+                    minY = FVector2D(X, Y);
+                    miyIndex = VertexIndex;
+                }
+                else if (Y > maxY.Y)
+                {
+                    maxY = FVector2D(X, Y);
+                    mayIndex = VertexIndex;
+                }
+            }
+        }
+        
+        int32 xDistance = maxX.X - minX.X;
+        int32 yDistance = maxY.Y - minY.Y;
+
+        for (int32 i = 0; i < ProjectedVertices.Num(); i++)
+        {
+            float xOffset = Amount * (1 - ((maxX.X - ProjectedVertices[i].X) / xDistance));
+            float yOffset = Amount * (1 - ((maxY.Y - ProjectedVertices[i].Y) / yDistance));
+            if (xAmount != 0)
+            {
+                Mesh->SetVertex(i, (Mesh->GetVertex(i) + xOffset * xAmount * NormalizedVector), true);
+            }
+            if (yAmount != 0)
+            {
+                Mesh->SetVertex(i, (Mesh->GetVertex(i) + yOffset * yAmount * NormalizedVector), true);
+            }
+        }
+    }
 }

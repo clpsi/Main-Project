@@ -10,6 +10,7 @@
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/DynamicMesh3.h"
 
+
 #include "Math/Quat.h"
 #include "Engine/World.h"
 
@@ -28,4 +29,12 @@ public:
 	static bool CopyPolygroupToMesh(UDynamicMeshComponent* InputMeshComp, UDynamicMeshComponent* TargetMesh, int32 Polygroup);
 	UFUNCTION(BlueprintCallable)
 	static bool SweepComponent(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, ECollisionChannel TraceChannel, TArray<FHitResult>& OutHits);
+	UFUNCTION(BlueprintCallable)
+	static bool TraceFromInsideMesh(AActor* ActorToIgnore, bool ShouldIgnore, const FVector& Start, const FVector& End, FHitResult& OutHit);
+	UFUNCTION(BlueprintCallable)
+	static void EnableDoubleSidedGeometry(UDynamicMeshComponent* Mesh);
+	UFUNCTION(BlueprintCallable)
+	static void FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshComponent);
+	UFUNCTION(BlueprintCallable)
+	static void MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygroup, float Amount, int32 xAmount, int32 yAmount);
 };
