@@ -9,6 +9,8 @@
 #include "DynamicMesh/DynamicAttribute.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/DynamicMesh3.h"
+#include "DynamicMeshEditor.h"
+#include "MeshBoundaryLoops.h"
 
 #include "Polygroups/PolygroupSet.h"
 #include "Polygroups/PolygroupsGenerator.h"
@@ -197,19 +199,38 @@ void UcppFunctions::FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshC
         return;
     }
 
-    FDynamicMesh3& Mesh = MeshComponent->GetMesh();
+    FDynamicMesh3* Mesh = MeshComponent->GetMesh();
 
     // Ensure the mesh has valid triangles
-    if (Mesh.TriangleCount() == 0)
+    if (Mesh->MaxTriangleID() == 0)
     {
         return;
     }
 
     // Create an editor for the dynamic mesh
-    FDynamicMeshEditor Editor(&Mesh);
+    FDynamicMeshEditor Editor(Mesh);
+    FMeshBoundaryLoops BoundaryLoops(Mesh, true);
 
-    // Fill all holes in the mesh
-    Editor.FillAllHoles();
+    if (BoundaryLoops.Compute())
+    {
+        for (const FEdgeLoop& Loop : BoundaryLoops.Loops)
+        {
+            // Calculate the centroid of the boundary loop
+            FVector3d Centroid(0, 0, 0);
+            for (int32 VertexID : Loop.Vertices)
+            {
+                Centroid += Mesh->GetVertex(VertexID);
+            }
+            Centroid /= (double)Loop.Vertices.Num();
+            int32 NewVertexID = Mesh->AppendVertex(Centroid);
+            // Prepare a mesh edit result to capture the output
+            FDynamicMeshEditResult EditResult;
+
+            // Fill the hole using AddTriangleFan_OrderedVertexLoop
+            Editor.AddTriangleFan_OrderedVertexLoop(NewVertexID, Loop.Vertices, FDynamicMesh3::InvalidID, EditResult);
+        }
+    }
+
 
     // Update the mesh after modification
     MeshComponent->NotifyMeshUpdated();
