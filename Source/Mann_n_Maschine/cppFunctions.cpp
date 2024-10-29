@@ -2,6 +2,8 @@
 
 #include "cppFunctions.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+
 #include "Components/DynamicMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 
@@ -10,7 +12,12 @@
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMeshEditor.h"
+#include "DynamicMesh/InfoTypes.h"
 #include "MeshBoundaryLoops.h"
+#include "MeshDescription.h"
+
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 #include "Polygroups/PolygroupSet.h"
 #include "Polygroups/PolygroupsGenerator.h"
@@ -18,12 +25,13 @@
 #include "GeometryScript/MeshPolygroupFunctions.h"
 #include "GeometryScript/GeometryScriptTypes.h"
 
-#include "Engine/StaticMesh.h"
-
 #include "GameFramework/Actor.h"
 #include "Engine/GameEngine.h"
 #include "Engine/World.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshAttributes.h"
 
+#include "Misc/PackageName.h"
 #include <DocObj.h>
 #include "IndexTypes.h"
 
@@ -368,12 +376,106 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygro
             float yOffset = Amount * (1 - ((maxY.Y - ProjectedVertices[i].Y) / yDistance));
             if (xAmount != 0)
             {
-                Mesh->SetVertex(i, (Mesh->GetVertex(i) + xOffset * xAmount * NormalizedVector), true);
+                Mesh->SetVertex(i, (Mesh->GetVertex(i) + xOffset * xAmount * FVector3d(Mesh->GetVertexInfo(i).Normal)), true);
             }
             if (yAmount != 0)
             {
-                Mesh->SetVertex(i, (Mesh->GetVertex(i) + yOffset * yAmount * NormalizedVector), true);
+                Mesh->SetVertex(i, (Mesh->GetVertex(i) + yOffset * yAmount * FVector3d(Mesh->GetVertexInfo(i).Normal)), true);
             }
         }
     }
+}
+
+void UcppFunctions::CalculateSurface(UDynamicMeshComponent* InputMesh)
+{
+    float TotalSurfaceArea = 0.0f;
+    FDynamicMesh3* Mesh = InputMesh->GetMesh();
+
+    // Iterate through all triangles in the mesh
+    for (int TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount(); ++TriangleIndex)
+    {
+        // Get the vertices of the triangle
+        FVector3d VertexA, VertexB, VertexC;
+        Mesh->GetTriVertices(TriangleIndex, VertexA, VertexB, VertexC);
+
+        // Calculate two edge vectors
+        FVector3d Edge1 = VertexB - VertexA;
+        FVector3d Edge2 = VertexC - VertexA;
+
+        // Compute the cross product of the edge vectors
+        FVector3d CrossProduct = FVector3d::CrossProduct(Edge1, Edge2);
+
+        // Calculate the area of the triangle (half of the magnitude of the cross product)
+        float TriangleArea = CrossProduct.Length() * 0.5f;
+
+        // Add the triangle's area to the total
+        TotalSurfaceArea += TriangleArea;
+    }
+
+    //now trace along normal to find thickness for weight calculation
+}
+
+void UcppFunctions::SaveStaticMesh(UStaticMesh* InputStaticMesh, const FString& AssetName, const FString& PackagePath)
+{
+    if (!InputStaticMesh)
+    {
+        return; // Ensure the mesh to copy is valid
+    }
+
+    // Duplicate the Static Mesh
+    UStaticMesh* StaticMesh = DuplicateObject<UStaticMesh>(InputStaticMesh, GetTransientPackage());
+
+    FString PackageName = PackagePath + AssetName;
+    UPackage* Package = CreatePackage(*PackageName);
+    if (!Package) return;
+
+    if (FPackageName::DoesPackageExist(PackageName + ".uasset"))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Asset package already exists: %s"), *PackageName);
+        return;
+    }
+
+    StaticMesh->Rename(*AssetName, Package);
+
+    // Ensure LOD0 Source Model exists and set BuildSettings
+    if (StaticMesh->GetNumSourceModels() == 0)
+    {
+        StaticMesh->AddSourceModel();
+    }
+    FStaticMeshSourceModel& SourceModel = StaticMesh->GetSourceModel(0);
+    SourceModel.BuildSettings.bRecomputeNormals = true;
+    SourceModel.BuildSettings.bRecomputeTangents = true;
+
+    // Create and populate FMeshDescription for LOD0 if necessary
+    FMeshDescription* MeshDescription = StaticMesh->GetMeshDescription(0);
+    if (!MeshDescription)
+    {
+        MeshDescription = StaticMesh->CreateMeshDescription(0);
+        if (!MeshDescription)
+        {
+            UE_LOG(LogTemp, Error, TEXT("Failed to create a valid MeshDescription for StaticMesh"));
+            return;
+        }
+    }
+
+    // Add vertices and triangle data to MeshDescription here if needed
+    // (This step is essential; without vertex/triangle data, the mesh remains incomplete.)
+
+    StaticMesh->CommitMeshDescription(0);
+
+    // Build and initialize resources to validate mesh data
+    StaticMesh->Build(true);
+    StaticMesh->InitResources();
+
+    // Register with AssetRegistry
+    FAssetRegistryModule::AssetCreated(StaticMesh);
+    StaticMesh->MarkPackageDirty();
+
+    FString PackageFilePath = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+
+    FSavePackageArgs SaveArgs;
+    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+    UPackage::SavePackage(Package, StaticMesh, *PackageFilePath, SaveArgs);
+
+    //destroy copiedMesh perhaps
 }
