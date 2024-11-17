@@ -244,7 +244,7 @@ void UcppFunctions::FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshC
     MeshComponent->NotifyMeshUpdated();
 }
 
-void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygroup, float Amount, int32 xAmount, int32 yAmount)
+void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, float Amount, int32 xAmount, int32 yAmount)
 {
     if (InputMesh)
     {
@@ -259,7 +259,6 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygro
 
         TArray<FVector3d> TriangleNormals;
 
-        FPolygroupSet Groups(Mesh, InputGroupLayer);
         TArray<int32> VertexIndices;
 
         for (int32 TriangleID = 0; TriangleID < Mesh->MaxTriangleID(); ++TriangleID)
@@ -269,13 +268,10 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygro
                 FVector3d Normal = Mesh->GetTriNormal(TriangleID);
                 TriangleNormals.Add(Normal);
 
-                if (Groups.GetGroup(TriangleID) == Polygroup)
-                {
-                    FIndex3i UniqueVertices = Mesh->GetTriangle(TriangleID);
-                    VertexIndices.AddUnique(UniqueVertices.A);
-                    VertexIndices.AddUnique(UniqueVertices.B);
-                    VertexIndices.AddUnique(UniqueVertices.C);
-                }
+                FIndex3i UniqueVertices = Mesh->GetTriangle(TriangleID);
+                VertexIndices.AddUnique(UniqueVertices.A);
+                VertexIndices.AddUnique(UniqueVertices.B);
+                VertexIndices.AddUnique(UniqueVertices.C);
             }
         }
 

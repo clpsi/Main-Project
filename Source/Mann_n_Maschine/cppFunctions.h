@@ -36,7 +36,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	static void FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshComponent);
 	UFUNCTION(BlueprintCallable)
-	static void MoveVertices(UDynamicMeshComponent* InputMesh, int32 Polygroup, float Amount, int32 xAmount, int32 yAmount);
+	static void MoveVertices(UDynamicMeshComponent* InputMesh, float Amount, int32 xAmount, int32 yAmount);
 	UFUNCTION(BlueprintCallable)
 	static void CalculateSurface(UDynamicMeshComponent* InputMesh);
 	UFUNCTION(BlueprintCallable)
