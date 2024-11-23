@@ -108,10 +108,10 @@ bool UcppFunctions::CopyPolygroupToMesh(UDynamicMeshComponent* InputMesh, UDynam
         int32 count = TMesh->VertexCount();
         int32 triangle = TMesh->TriangleCount();
         TargetMesh->MarkRenderStateDirty();
-        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Vertices Count: %d"), count));
+        /*GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Vertices Count: %d"), count));
         UE_LOG(LogBlueprintUserMessages, Log, TEXT("Vertices Count: %d"), count);
         GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, FString::Printf(TEXT("Triangle Count: %d"), triangle));
-        UE_LOG(LogBlueprintUserMessages, Log, TEXT("Triangle Count: %d"), triangle);
+        UE_LOG(LogBlueprintUserMessages, Log, TEXT("Triangle Count: %d"), triangle);*/
         return true;
     }
     return false;
@@ -252,132 +252,134 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, float Amount,
         InputGroupLayer.bIsDefaultLayer = true;
         FDynamicMesh3* Mesh = InputMesh->GetMesh();
 
-        if (InputGroupLayer.CheckExists(Mesh) == false)
+        if (InputGroupLayer.CheckExists(Mesh) == false || Amount == 0.0)
         {
             UE_LOG(LogBlueprintUserMessages, Log, TEXT("Failed"));
         }
 
+        Mesh->EnableAttributes();
+        FDynamicMeshNormalOverlay* NormalOverlay = Mesh->Attributes()->PrimaryNormals();
+        TArray<FVector2D> ProjectedVertices;
         TArray<FVector3d> TriangleNormals;
-
         TArray<int32> VertexIndices;
 
-        for (int32 TriangleID = 0; TriangleID < Mesh->MaxTriangleID(); ++TriangleID)
+        for (int i : Mesh->VertexIndicesItr())
         {
-            if (Mesh->IsTriangle(TriangleID))
+            VertexIndices.Push(i);
+        }
+
+        if (xAmount != 0 || yAmount != 0)
+        {
+            for (int32 TriangleID = 0; TriangleID < Mesh->MaxTriangleID(); ++TriangleID)
             {
-                FVector3d Normal = Mesh->GetTriNormal(TriangleID);
-                TriangleNormals.Add(Normal);
-
-                FIndex3i UniqueVertices = Mesh->GetTriangle(TriangleID);
-                VertexIndices.AddUnique(UniqueVertices.A);
-                VertexIndices.AddUnique(UniqueVertices.B);
-                VertexIndices.AddUnique(UniqueVertices.C);
-            }
-        }
-
-        FVector3d NormalSum(0, 0, 0);
-
-        for (const FVector3d& Normal : TriangleNormals)
-        {
-            NormalSum += Normal;
-        }
-
-        FVector3d AverageNormal(0, 0, 0);
-
-        if (TriangleNormals.Num() > 0)
-        {
-            AverageNormal = NormalSum / static_cast<double>(TriangleNormals.Num());
-        }
-
-        AverageNormal.Normalize();
-        FVector3d NormalizedVector = AverageNormal.GetSafeNormal(); //Plane Normal
-        // Choose an arbitrary vector that is not parallel to NormalVector
-        FVector3d ArbitraryVector;
-        if (FMath::Abs(NormalizedVector.X) < 0.99)
-        {
-            ArbitraryVector = FVector3d(1, 0, 0); // X-axis
-        }
-        else
-        {
-            ArbitraryVector = FVector3d(0, 1, 0); // Y-axis
-        }
-
-        // Compute the first orthogonal vector using the cross product
-        FVector3d VX = FVector3d::CrossProduct(NormalizedVector, ArbitraryVector);
-        VX.Normalize();
-
-        // Compute the second orthogonal vector using the cross product again
-        FVector3d VY = FVector3d::CrossProduct(NormalizedVector, VX);
-        VY.Normalize();
-
-        TArray<FVector2D> ProjectedVertices;
-        FVector2D maxX = FVector2D(-100000.0f, -100000.0f);
-        int32 maxIndex = -1;
-        FVector2D minX = FVector2D(100000.0f, 100000.0f);
-        int32 minIndex = -1;
-        FVector2D maxY = FVector2D(-100000.0f, -100000.0f);
-        int32 mayIndex = -1;
-        FVector2D minY = FVector2D(100000.0f, 100000.0f);
-        int32 miyIndex = -1;
-        
-        for (int32 VertexIndex : VertexIndices)
-        {
-            FVector3d VertexPosition = Mesh->GetVertex(VertexIndex);
-
-            // Calculate the distance from the vertex to the plane along the normal
-            float Distance = FVector3d::DotProduct(VertexPosition, NormalizedVector);
-
-            // Calculate the projection of the vertex onto the plane
-            FVector3d ProjectedVertex = VertexPosition - (Distance * NormalizedVector);
-
-            // Calculate the local 2D coordinates in the plane's coordinate system
-            float X = FVector3d::DotProduct(ProjectedVertex, VX);
-            float Y = FVector3d::DotProduct(ProjectedVertex, VY);
-            ProjectedVertices.Push(FVector2D(X, Y));
-            
-            if (xAmount != 0) 
-            {
-                if (X < minX.X)
+                if (Mesh->IsTriangle(TriangleID))
                 {
-                    minX = FVector2D(X, Y);
-                    minIndex = VertexIndex;
-                }
-                else if (X > maxX.X)
-                {
-                    maxX = FVector2D(X, Y);
-                    maxIndex = VertexIndex;
+                    FVector3d Normal = Mesh->GetTriNormal(TriangleID);
+                    TriangleNormals.Add(Normal);
                 }
             }
-            if (yAmount != 0)
+
+            FVector3d NormalSum(0, 0, 0);
+
+            for (const FVector3d& Normal : TriangleNormals)
             {
-                if (Y < minY.Y)
+                NormalSum += Normal;
+            }
+
+            FVector3d AverageNormal(0, 0, 0);
+
+            if (TriangleNormals.Num() > 0)
+            {
+                AverageNormal = (NormalSum / static_cast<double>(TriangleNormals.Num()));
+            }
+
+            AverageNormal.Normalize();
+            FVector3d NormalizedVector = AverageNormal.GetSafeNormal(); //Plane Normal
+            // Choose an arbitrary vector that is not parallel to NormalVector
+            FVector3d ArbitraryVector = (FMath::Abs(NormalizedVector.X) < FMath::Abs(NormalizedVector.Y) &&
+                FMath::Abs(NormalizedVector.X) < FMath::Abs(NormalizedVector.Z)) ?
+                FVector3d(1, 0, 0) : ((FMath::Abs(NormalizedVector.Y) < FMath::Abs(NormalizedVector.Z)) ?
+                FVector3d(0, 1, 0) : FVector3d(0, 0, 1));
+            // Compute the first orthogonal vector using the cross product
+            FVector3d VX = FVector3d::CrossProduct(NormalizedVector, ArbitraryVector);
+            VX.Normalize();
+            // Compute the second orthogonal vector using the cross product again
+            FVector3d VY = FVector3d::CrossProduct(NormalizedVector, VX);
+            VY.Normalize();
+
+            float maxX = -100000.0f;
+            float minX = 100000.0f;
+            float maxY = -100000.0f;
+            float minY = 100000.0f;
+
+            for (int32 VertexIndex : VertexIndices)
+            {
+                FVector3d VertexPosition = Mesh->GetVertex(VertexIndex);
+
+                // Calculate the distance from the vertex to the plane along the normal
+                float Distance = FVector3d::DotProduct(VertexPosition, NormalizedVector);
+
+                // Calculate the projection of the vertex onto the plane
+                FVector3d ProjectedVertex = VertexPosition - (Distance * NormalizedVector);
+
+                // Calculate the local 2D coordinates in the plane's coordinate system
+                float X = FVector3d::DotProduct(ProjectedVertex, VX);
+                float Y = FVector3d::DotProduct(ProjectedVertex, VY);
+                ProjectedVertices.Push(FVector2D(X, Y));
+
+                if (xAmount != 0)
                 {
-                    minY = FVector2D(X, Y);
-                    miyIndex = VertexIndex;
+                    if (X < minX)
+                    {
+                        minX = X;
+                    }
+                    else if (X > maxX)
+                    {
+                        maxX = X;
+                    }
                 }
-                else if (Y > maxY.Y)
+                if (yAmount != 0)
                 {
-                    maxY = FVector2D(X, Y);
-                    mayIndex = VertexIndex;
+                    if (Y < minY)
+                    {
+                        minY = Y;
+                    }
+                    else if (Y > maxY)
+                    {
+                        maxY = Y;
+                    }
                 }
+            }
+
+            int32 xDistance = maxX - minX;
+            int32 yDistance = maxY - minY;
+
+            for (int32 VertexIndex : VertexIndices)
+            {
+                FVector3d VertexPosition = Mesh->GetVertex(VertexIndex);
+                // Calculate the distance from the vertex to the plane along the normal
+                float Distance = FVector3d::DotProduct(VertexPosition, NormalizedVector);
+                // Calculate the projection of the vertex onto the plane
+                FVector3d ProjectedVertex = VertexPosition - (Distance * NormalizedVector);
+                // Calculate the local 2D coordinates in the plane's coordinate system
+                float X = FVector3d::DotProduct(ProjectedVertex, VX);
+                float Y = FVector3d::DotProduct(ProjectedVertex, VY);
+                X = xAmount != 0 ? (1.0 - (ProjectedVertices[VertexIndex].X - minX) / xDistance) : (1.0 - (ProjectedVertices[VertexIndex].Y - minY) / yDistance);
+                Y = yAmount == 0 ? (1.0 - (ProjectedVertices[VertexIndex].X - minX) / xDistance) : (1.0 - (ProjectedVertices[VertexIndex].Y - minY) / yDistance);
+                X = FMath::Sign(xAmount) >= 0 ? X : 1.0 - X;
+                Y = FMath::Sign(yAmount) >= 0 ? Y : 1.0 - Y;
+                ProjectedVertices[VertexIndex] = FVector2D(X, Y);
             }
         }
-        
-        int32 xDistance = maxX.X - minX.X;
-        int32 yDistance = maxY.Y - minY.Y;
 
-        for (int32 i = 0; i < ProjectedVertices.Num(); i++)
+        for (int32 i = 0; i < VertexIndices.Num(); i++)
         {
-            float xOffset = Amount * (1 - ((maxX.X - ProjectedVertices[i].X) / xDistance));
-            float yOffset = Amount * (1 - ((maxY.Y - ProjectedVertices[i].Y) / yDistance));
-            if (xAmount != 0)
-            {
-                Mesh->SetVertex(i, (Mesh->GetVertex(i) + xOffset * xAmount * FVector3d(Mesh->GetVertexInfo(i).Normal)), true);
-            }
-            if (yAmount != 0)
-            {
-                Mesh->SetVertex(i, (Mesh->GetVertex(i) + yOffset * yAmount * FVector3d(Mesh->GetVertexInfo(i).Normal)), true);
-            }
+            FVector3f Normal;
+            NormalOverlay->GetElement(i, Normal);
+            FVector3d NormalDouble = FVector3d(Normal);
+            float X = xAmount != 0 || yAmount != 0 ? (ProjectedVertices[i].X + ProjectedVertices[i].Y) / 2.0 : 1.0;
+            //UE_LOG(LogBlueprintUserMessages, Log, TEXT("h: %f"), X * Amount);
+            Mesh->SetVertex(i, (Mesh->GetVertex(i) + X * Amount * NormalDouble), true);
         }
     }
 }
