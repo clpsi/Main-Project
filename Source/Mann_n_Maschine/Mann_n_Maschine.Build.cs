@@ -8,7 +8,10 @@ public class Mann_n_Maschine : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "ModelingComponents", "GeometryFramework", "GeometryCore", "GeometryScriptingCore", "DynamicMesh" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
+			"ModelingComponents", "GeometryFramework", "GeometryCore", "GeometryScriptingCore", "DynamicMesh",
+			"RealtimeMeshComponent", "RealtimeMeshExamples", "RealtimeMeshEditor", "RealtimeMeshTests", 
+			"AssetRegistry" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

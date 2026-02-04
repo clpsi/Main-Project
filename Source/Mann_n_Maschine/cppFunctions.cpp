@@ -13,6 +13,16 @@
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMeshEditor.h"
 #include "DynamicMesh/InfoTypes.h"
+
+#include "RealtimeMeshActor.h"
+#include "RealtimeMeshComponent.h"
+#include "RealtimeMesh.h"
+#include "RealtimeMeshSimple.h"
+#include "RealtimeMeshLibrary.h"
+#include "RealtimeMeshByStreamBuilder.h"
+#include "Core/RealtimeMeshBuilder.h"
+#include "Core/RealtimeMeshDataStream.h"
+
 #include "MeshBoundaryLoops.h"
 #include "MeshDescription.h"
 
@@ -42,7 +52,6 @@
 #include "Components/PrimitiveComponent.h"
 //D:\Programs\UE_5.4\Engine\Plugins\Runtime\GeometryScripting\Source\GeometryScriptingCore\Private
 
-using namespace UE::Geometry;
 
 
 bool UcppFunctions::CopyPolygroupToMesh(UDynamicMeshComponent* InputMesh, UDynamicMeshComponent* TargetMesh, int32 Polygroup)
@@ -51,7 +60,7 @@ bool UcppFunctions::CopyPolygroupToMesh(UDynamicMeshComponent* InputMesh, UDynam
     {
         const UE::Geometry::FDynamicMesh3* ReadMesh = InputMesh->GetMesh();
 
-        FPolygroupLayer InputGroupLayer;
+        UE::Geometry::FPolygroupLayer InputGroupLayer;
         InputGroupLayer.bIsDefaultLayer = true;
         if (InputGroupLayer.CheckExists(ReadMesh) == false)
         {
@@ -59,7 +68,7 @@ bool UcppFunctions::CopyPolygroupToMesh(UDynamicMeshComponent* InputMesh, UDynam
             return false;
         }
 
-        FPolygroupSet Groups(ReadMesh, InputGroupLayer);
+        UE::Geometry::FPolygroupSet Groups(ReadMesh, InputGroupLayer);
 
         FDynamicMesh3* Mesh = InputMesh->GetMesh();
         FDynamicMesh3* TMesh = TargetMesh->GetMesh();
@@ -172,30 +181,20 @@ bool UcppFunctions::TraceFromInsideMesh(AActor* ActorToIgnore, bool ShouldIgnore
     return bHit;
 }
 
-void UcppFunctions::EnableDoubleSidedGeometry(UDynamicMeshComponent* InputMesh)
+void UcppFunctions::NumPolygroups(UDynamicMeshComponent* InputMesh, TArray<int32>& PolygroupIDs)
 {
     if (InputMesh)
     {
+        UE::Geometry::FPolygroupLayer InputGroupLayer;
+        InputGroupLayer.bIsDefaultLayer = true;
         FDynamicMesh3* Mesh = InputMesh->GetMesh();
-        if (Mesh)
-        {
-            // Duplicate each triangle and reverse the vertex order to create a double-sided effect
-            for (int32 TID = 0; TID < Mesh->MaxTriangleID(); ++TID)
-            {
-                if (Mesh->IsTriangle(TID))
-                {
-                    FIndex3i Triangle = Mesh->GetTriangle(TID);
-
-                    // Add a new triangle with reversed vertex order
-                    Mesh->AppendTriangle(Triangle.C, Triangle.B, Triangle.A);
-                }
-            }
-
-            // Update the mesh to include the new triangles
-            InputMesh->NotifyMeshUpdated();
-
-            //Has No collision
-            //DynamicMeshComponent->UpdateCollision();
+        Mesh->EnableAttributes();
+        UE::Geometry::FPolygroupSet Groups(Mesh, InputGroupLayer);
+        
+        for (int32 TriangleID : Mesh->TriangleIndicesItr())
+        {   // Get the group ID for this triangle
+            int32 GroupID = Groups.GetGroup(TriangleID);
+            PolygroupIDs.Push(GroupID);
         }
     }
 }
@@ -216,12 +215,12 @@ void UcppFunctions::FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshC
     }
 
     // Create an editor for the dynamic mesh
-    FDynamicMeshEditor Editor(Mesh);
-    FMeshBoundaryLoops BoundaryLoops(Mesh, true);
+    UE::Geometry::FDynamicMeshEditor Editor(Mesh);
+    UE::Geometry::FMeshBoundaryLoops BoundaryLoops(Mesh, true);
 
     if (BoundaryLoops.Compute())
     {
-        for (const FEdgeLoop& Loop : BoundaryLoops.Loops)
+        for (const UE::Geometry::FEdgeLoop& Loop : BoundaryLoops.Loops)
         {
             // Calculate the centroid of the boundary loop
             FVector3d Centroid(0, 0, 0);
@@ -232,7 +231,7 @@ void UcppFunctions::FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshC
             Centroid /= (double)Loop.Vertices.Num();
             int32 NewVertexID = Mesh->AppendVertex(Centroid);
             // Prepare a mesh edit result to capture the output
-            FDynamicMeshEditResult EditResult;
+            UE::Geometry::FDynamicMeshEditResult EditResult;
 
             // Fill the hole using AddTriangleFan_OrderedVertexLoop
             Editor.AddTriangleFan_OrderedVertexLoop(NewVertexID, Loop.Vertices, FDynamicMesh3::InvalidID, EditResult);
@@ -248,7 +247,7 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, float Amount,
 {
     if (InputMesh)
     {
-        FPolygroupLayer InputGroupLayer;
+        UE::Geometry::FPolygroupLayer InputGroupLayer;
         InputGroupLayer.bIsDefaultLayer = true;
         FDynamicMesh3* Mesh = InputMesh->GetMesh();
 
@@ -258,7 +257,7 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, float Amount,
         }
 
         Mesh->EnableAttributes();
-        FDynamicMeshNormalOverlay* NormalOverlay = Mesh->Attributes()->PrimaryNormals();
+        UE::Geometry::FDynamicMeshNormalOverlay* NormalOverlay = Mesh->Attributes()->PrimaryNormals();
         TArray<FVector2D> ProjectedVertices;
         TArray<FVector3d> TriangleNormals;
         TArray<int32> VertexIndices;
@@ -378,7 +377,6 @@ void UcppFunctions::MoveVertices(UDynamicMeshComponent* InputMesh, float Amount,
             NormalOverlay->GetElement(i, Normal);
             FVector3d NormalDouble = FVector3d(Normal);
             float X = xAmount != 0 || yAmount != 0 ? (ProjectedVertices[i].X + ProjectedVertices[i].Y) / 2.0 : 1.0;
-            //UE_LOG(LogBlueprintUserMessages, Log, TEXT("h: %f"), X * Amount);
             Mesh->SetVertex(i, (Mesh->GetVertex(i) + X * Amount * NormalDouble), true);
         }
     }
@@ -476,4 +474,101 @@ void UcppFunctions::SaveStaticMesh(UStaticMesh* InputStaticMesh, const FString& 
     UPackage::SavePackage(Package, StaticMesh, *PackageFilePath, SaveArgs);
 
     //destroy copiedMesh perhaps
+}
+
+URealtimeMeshSimple* UcppFunctions::ConvertToRMC(UObject* WorldContext, UDynamicMeshComponent* DynamicMeshComp)
+{
+    if (!DynamicMeshComp) return nullptr;
+
+    // 1. Safely extract DynamicMesh
+    FDynamicMesh3 Mesh;
+    {
+        const FDynamicMesh3* SrcMesh = DynamicMeshComp->GetDynamicMesh()->GetMeshPtr(); //might be replaced in later Versions unfortunatly
+        if (!SrcMesh)
+        {
+            return nullptr;
+        }
+        Mesh = *SrcMesh; // copy
+    }
+
+    const UE::Geometry::FDynamicMeshNormalOverlay* NormalOverlay =
+        Mesh.Attributes() ? Mesh.Attributes()->PrimaryNormals() : nullptr;
+
+    const UE::Geometry::FDynamicMeshUVOverlay* UVOverlay =
+        Mesh.Attributes() ? Mesh.Attributes()->PrimaryUV() : nullptr;
+
+    // 2. Setup stream set + builder
+    RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+
+    RealtimeMesh::TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+
+    //doesnt work ig Builder.EnableNormals();
+    Builder.EnableTexCoords();
+    Builder.EnableTangents();
+    //Builder.EnableColors();
+    Builder.EnablePolyGroups();
+
+    // 3. Build vertices + indices
+    for (int32 TriID : Mesh.TriangleIndicesItr())
+    {
+        const UE::Geometry::FIndex3i Tri = Mesh.GetTriangle(TriID);
+
+        for (int32 Corner = 0; Corner < 3; ++Corner)
+        {
+            const int32 VertexID = Tri[Corner];
+
+            FVector3f Position = (FVector3f)Mesh.GetVertex(VertexID);
+            FVector3f Normal = FVector3f::UpVector;
+            FVector2f UV = FVector2f::ZeroVector;
+
+            if (NormalOverlay) // && NormalOverlay->IsTriangle(TriID) should be EnumerateVertexElements(TriID, ?, false)
+            {
+                const int32 NormalID = NormalOverlay->GetTriangle(TriID)[Corner];
+                Normal = (FVector3f)NormalOverlay->GetElement(NormalID);
+            }
+
+            if (UVOverlay) // && UVOverlay->IsTriangle(TriID)
+            {
+                const int32 UVID = UVOverlay->GetTriangle(TriID)[Corner];
+                UV = (FVector2f)UVOverlay->GetElement(UVID);
+            }
+
+            Builder.AddVertex(Position)
+                .SetNormal(Normal)
+                .SetTexCoord(UV);
+        }
+
+        Builder.AddTriangle(
+            Builder.NumVertices() - 3,
+            Builder.NumVertices() - 2,
+            Builder.NumVertices() - 1
+        );
+    }
+
+    // 4. Create RealtimeMesh
+    URealtimeMeshSimple* RealtimeMesh = NewObject<URealtimeMeshSimple>(WorldContext);
+
+    // 5. Create section group from StreamSet
+    const auto GroupKey = FRealtimeMeshSectionGroupKey::Create(0, "CubeGroup"); //FRealtimeMeshSectionGroupKey
+    RealtimeMesh->CreateSectionGroup(
+        GroupKey,
+        StreamSet
+    );
+
+    return RealtimeMesh;
+}
+
+void UcppFunctions::ConvertToDMC(UDynamicMeshComponent* DMC, URealtimeMeshComponent* InputMesh) {
+    if (!InputMesh || !DMC)
+        return;
+
+    URealtimeMesh* RealtimeMesh = InputMesh->GetRealtimeMesh();
+    if (!RealtimeMesh)
+        return;
+
+    TArray<FVector3f> Positions;
+    TArray<int32> Indices;
+    TArray<FVector3f> Normals;
+    TArray<FVector2f> UVs;
+
 }

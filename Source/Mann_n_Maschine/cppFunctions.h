@@ -5,11 +5,13 @@
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Polygroups/PolygroupSet.h"
+
 #include "Components/DynamicMeshComponent.h"
 #include "DynamicMesh/DynamicAttribute.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/DynamicMesh3.h"
-
+#include "RealtimeMeshComponent.h"
+#include "RealtimeMeshSimple.h"
 
 #include "Math/Quat.h"
 #include "Engine/World.h"
@@ -32,7 +34,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	static bool TraceFromInsideMesh(AActor* ActorToIgnore, bool ShouldIgnore, const FVector& Start, const FVector& End, FHitResult& OutHit);
 	UFUNCTION(BlueprintCallable)
-	static void EnableDoubleSidedGeometry(UDynamicMeshComponent* InputMesh);
+	static void NumPolygroups(UDynamicMeshComponent* InputMesh, TArray<int32>& PolygroupIDs);
 	UFUNCTION(BlueprintCallable)
 	static void FillHolesInDynamicMeshComponent(UDynamicMeshComponent* MeshComponent);
 	UFUNCTION(BlueprintCallable)
@@ -41,4 +43,8 @@ public:
 	static void CalculateSurface(UDynamicMeshComponent* InputMesh);
 	UFUNCTION(BlueprintCallable)
 	static void SaveStaticMesh(UStaticMesh* Mesh, const FString& AssetName, const FString& PackagePath);
+	UFUNCTION(BlueprintCallable)
+	static URealtimeMeshSimple* ConvertToRMC(UObject* WorldContext, UDynamicMeshComponent* DynamicMeshComp);
+	UFUNCTION(BlueprintCallable)
+	static void ConvertToDMC(UDynamicMeshComponent* DMC, URealtimeMeshComponent* InputMesh);
 };
