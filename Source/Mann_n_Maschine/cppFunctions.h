@@ -46,5 +46,5 @@ public:
 	UFUNCTION(BlueprintCallable)
 	static URealtimeMeshSimple* ConvertToRMC(UObject* WorldContext, UDynamicMeshComponent* DynamicMeshComp);
 	UFUNCTION(BlueprintCallable)
-	static void ConvertToDMC(UDynamicMeshComponent* DMC, URealtimeMeshComponent* InputMesh);
+	static void ConvertToDMC(UDynamicMeshComponent* DynamicMeshComp, URealtimeMeshSimple* RealtimeMesh);
 };

@@ -39,6 +39,7 @@
 #include "Engine/GameEngine.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
+#include "Util/CompactMaps.h"
 #include "StaticMeshAttributes.h"
 
 #include "Misc/PackageName.h"
@@ -476,99 +477,321 @@ void UcppFunctions::SaveStaticMesh(UStaticMesh* InputStaticMesh, const FString& 
     //destroy copiedMesh perhaps
 }
 
-URealtimeMeshSimple* UcppFunctions::ConvertToRMC(UObject* WorldContext, UDynamicMeshComponent* DynamicMeshComp)
+URealtimeMeshSimple* UcppFunctions::ConvertToRMC(UObject* WorldContextObject, UDynamicMeshComponent* DynamicMeshComp)
 {
-    if (!DynamicMeshComp) return nullptr;
-
-    // 1. Safely extract DynamicMesh
-    FDynamicMesh3 Mesh;
+    if (!WorldContextObject || !DynamicMeshComp || !DynamicMeshComp->GetDynamicMesh())
     {
-        const FDynamicMesh3* SrcMesh = DynamicMeshComp->GetDynamicMesh()->GetMeshPtr(); //might be replaced in later Versions unfortunatly
-        if (!SrcMesh)
-        {
-            return nullptr;
-        }
-        Mesh = *SrcMesh; // copy
+        return nullptr;
     }
 
-    const UE::Geometry::FDynamicMeshNormalOverlay* NormalOverlay =
-        Mesh.Attributes() ? Mesh.Attributes()->PrimaryNormals() : nullptr;
-
-    const UE::Geometry::FDynamicMeshUVOverlay* UVOverlay =
-        Mesh.Attributes() ? Mesh.Attributes()->PrimaryUV() : nullptr;
-
-    // 2. Setup stream set + builder
-    RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
-
-    RealtimeMesh::TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
-
-    //doesnt work ig Builder.EnableNormals();
-    Builder.EnableTexCoords();
-    Builder.EnableTangents();
-    //Builder.EnableColors();
-    Builder.EnablePolyGroups();
-
-    // 3. Build vertices + indices
-    for (int32 TriID : Mesh.TriangleIndicesItr())
+    const FDynamicMesh3* SourceDynamicMesh = DynamicMeshComp->GetDynamicMesh()->GetMeshPtr();
+    if (!SourceDynamicMesh)
     {
-        const UE::Geometry::FIndex3i Tri = Mesh.GetTriangle(TriID);
+        return nullptr;
+    }
 
+    // Create a new RealtimeMesh object
+    URealtimeMeshSimple* RealtimeMesh = NewObject<URealtimeMeshSimple>(WorldContextObject);
+    if (!RealtimeMesh)
+    {
+        return nullptr;
+    }
+
+    // Prepare StreamSet and Builder for RealtimeMesh
+    RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+    RealtimeMesh::TRealtimeMeshBuilderLocal<uint32, FPackedNormal, FVector2DHalf, 1> Builder(StreamSet);
+    Builder.EnableTangents();
+    Builder.EnableTexCoords();
+    Builder.EnableColors();
+
+    // Get DynamicMesh attributes
+    const UE::Geometry::FDynamicMeshAttributeSet* Attributes = SourceDynamicMesh->Attributes();
+    const UE::Geometry::FDynamicMeshNormalOverlay* NormalOverlay = Attributes ? Attributes->PrimaryNormals() : nullptr;
+    const UE::Geometry::FDynamicMeshNormalOverlay* TangentOverlay = Attributes ? Attributes->PrimaryTangents() : nullptr;
+    const UE::Geometry::FDynamicMeshUVOverlay* UVOverlay = Attributes ? Attributes->PrimaryUV() : nullptr;
+    const UE::Geometry::FDynamicMeshColorOverlay* ColorOverlay = Attributes ? Attributes->PrimaryColors() : nullptr;
+
+
+    // Iterate through dynamic mesh triangles to build RealtimeMesh
+    for (int32 TriID : SourceDynamicMesh->TriangleIndicesItr())
+    {
+        const UE::Geometry::FIndex3i DynamicMeshTri = SourceDynamicMesh->GetTriangle(TriID);
+
+        // Add 3 vertices per triangle (one for each corner)
         for (int32 Corner = 0; Corner < 3; ++Corner)
         {
-            const int32 VertexID = Tri[Corner];
+            const FVertexID VertexID = DynamicMeshTri[Corner];
 
-            FVector3f Position = (FVector3f)Mesh.GetVertex(VertexID);
-            FVector3f Normal = FVector3f::UpVector;
-            FVector2f UV = FVector2f::ZeroVector;
+            // Get position
+            const FVector3f Position = (FVector3f)SourceDynamicMesh->GetVertex(VertexID);
 
+            // Get Normal
+            FVector3f Normal = FVector3f::UpVector; // Default value
             if (NormalOverlay) // && NormalOverlay->IsTriangle(TriID) should be EnumerateVertexElements(TriID, ?, false)
             {
-                const int32 NormalID = NormalOverlay->GetTriangle(TriID)[Corner];
-                Normal = (FVector3f)NormalOverlay->GetElement(NormalID);
+                Normal = (FVector3f)NormalOverlay->GetElement(NormalOverlay->GetTriangle(TriID)[Corner]);
             }
 
-            if (UVOverlay) // && UVOverlay->IsTriangle(TriID)
+            // Get Tangent
+            FVector3f Tangent = FVector3f::RightVector; // Default value
+            if (TangentOverlay)
             {
-                const int32 UVID = UVOverlay->GetTriangle(TriID)[Corner];
-                UV = (FVector2f)UVOverlay->GetElement(UVID);
+                Tangent = (FVector3f)TangentOverlay->GetElement(TangentOverlay->GetTriangle(TriID)[Corner]);
             }
 
-            Builder.AddVertex(Position)
-                .SetNormal(Normal)
-                .SetTexCoord(UV);
+            // Get UV
+            FVector2f UV = FVector2f::ZeroVector; // Default value
+            if (UVOverlay)
+            {
+                UV = (FVector2f)UVOverlay->GetElement(UVOverlay->GetTriangle(TriID)[Corner]);
+            }
+
+            // Get Color
+            FLinearColor Color = FLinearColor::White; // Default value
+            if (ColorOverlay)
+            {
+                Color = (FLinearColor)ColorOverlay->GetElement(ColorOverlay->GetTriangle(TriID)[Corner]);
+            }
+
+
+            // Add vertex to RealtimeMesh builder
+            // The builder will internally handle creating unique vertices based on attributes
+            const int32 RealtimeMeshVertexIndex = Builder.AddVertex(Position)
+                .SetNormalAndTangent(Normal, Tangent)
+                .SetTexCoord(UV)
+                .SetColor(Color)
+                .GetIndex();
+
+            // Store the index for triangle construction
+            Builder.SetTriangle(Builder.NumTriangles(), RealtimeMeshVertexIndex, RealtimeMeshVertexIndex, RealtimeMeshVertexIndex); // Placeholder, will be overwritten
         }
 
+        // Add the triangle using the last three added vertices
         Builder.AddTriangle(
             Builder.NumVertices() - 3,
             Builder.NumVertices() - 2,
             Builder.NumVertices() - 1
         );
     }
+    // Set material slot (assuming a single material)
+    const int32 MaterialSlot = 0;
 
-    // 4. Create RealtimeMesh
-    URealtimeMeshSimple* RealtimeMesh = NewObject<URealtimeMeshSimple>(WorldContext);
-
-    // 5. Create section group from StreamSet
-    const auto GroupKey = FRealtimeMeshSectionGroupKey::Create(0, "CubeGroup"); //FRealtimeMeshSectionGroupKey
-    RealtimeMesh->CreateSectionGroup(
-        GroupKey,
-        StreamSet
-    );
+    // Create a section group in RealtimeMesh
+    const FRealtimeMeshSectionGroupKey SectionGroupKey = FRealtimeMeshSectionGroupKey::Create(0, "ConvertedDynamicMesh");
+    RealtimeMesh->CreateSectionGroup(SectionGroupKey, StreamSet);
 
     return RealtimeMesh;
 }
 
-void UcppFunctions::ConvertToDMC(UDynamicMeshComponent* DMC, URealtimeMeshComponent* InputMesh) {
-    if (!InputMesh || !DMC)
+void UcppFunctions::ConvertToDMC(UDynamicMeshComponent* DynamicMeshComp, URealtimeMeshSimple* RealtimeMesh)
+{
+    if (!DynamicMeshComp || !RealtimeMesh)
+    {
         return;
+    }
 
-    URealtimeMesh* RealtimeMesh = InputMesh->GetRealtimeMesh();
-    if (!RealtimeMesh)
+    // Access RealtimeMesh data
+    RealtimeMesh::FRealtimeMeshStreamSet StreamSet;
+
+    // Get the first LOD and first section group for processing
+    TArray<FRealtimeMeshLODKey> LODKeys = RealtimeMesh->GetLODs();
+    if (LODKeys.Num() == 0)
+    {
         return;
+    }
+    FRealtimeMeshLODKey FirstLODKey = LODKeys[0];
 
-    TArray<FVector3f> Positions;
-    TArray<int32> Indices;
-    TArray<FVector3f> Normals;
-    TArray<FVector2f> UVs;
+    TArray<FRealtimeMeshSectionGroupKey> SectionGroupKeys = RealtimeMesh->GetSectionGroups(FirstLODKey);
+    if (SectionGroupKeys.Num() == 0)
+    {
+        return;
+    }
+    FRealtimeMeshSectionGroupKey FirstSectionGroupKey = SectionGroupKeys[0];
 
+    RealtimeMesh->ProcessMesh(FirstSectionGroupKey, [&](const RealtimeMesh::FRealtimeMeshStreamSet& InStreamSet)
+        {
+            StreamSet.CopyFrom(InStreamSet); // Explicitly copy the stream set for local processing
+        }
+    );
+
+    if (StreamSet.IsEmpty())
+    {
+        return;
+    }
+
+    // Get position, triangle, normal, tangent, and UV streams
+    const RealtimeMesh::FRealtimeMeshStream* PositionStream = StreamSet.Find(RealtimeMesh::FRealtimeMeshStreams::Position);
+    const RealtimeMesh::FRealtimeMeshStream* TriangleStream = StreamSet.Find(RealtimeMesh::FRealtimeMeshStreams::Triangles);
+    const RealtimeMesh::FRealtimeMeshStream* TangentsStream = StreamSet.Find(RealtimeMesh::FRealtimeMeshStreams::Tangents);
+    const RealtimeMesh::FRealtimeMeshStream* TexCoordsStream = StreamSet.Find(RealtimeMesh::FRealtimeMeshStreams::TexCoords);
+    const RealtimeMesh::FRealtimeMeshStream* ColorStream = StreamSet.Find(RealtimeMesh::FRealtimeMeshStreams::Color);
+
+
+    if (!PositionStream || !TriangleStream)
+    {
+        return;
+    }
+
+    // Begin editing the DynamicMesh
+    DynamicMeshComp->EditMesh([&](FDynamicMesh3& EditMesh)
+    {
+            EditMesh.Clear();
+
+            TMap<int32, FVertexID> RealtimeMeshToDynamicMeshVID;
+            RealtimeMeshToDynamicMeshVID.Reserve(PositionStream->Num());
+
+            // Add Vertices
+            for (int32 i = 0; i < PositionStream->Num(); ++i)
+            {
+                FVector3f Position = PositionStream->GetDataAtVertex<FVector3f>(i)[0];
+                RealtimeMeshToDynamicMeshVID.Add(i, EditMesh.AppendVertex((FVector3d)Position));
+            }
+
+            // Add Triangles
+            RealtimeMesh::TRealtimeMeshStreamBuilder<const RealtimeMesh::TIndex3<uint32>> TriangleBuilder(*TriangleStream);
+            for (int32 i = 0; i < TriangleBuilder.Num(); ++i)
+            {
+                const RealtimeMesh::TIndex3<uint32> RMTri = TriangleBuilder[i];
+                EditMesh.AppendTriangle(
+                    RealtimeMeshToDynamicMeshVID[RMTri.V0],
+                    RealtimeMeshToDynamicMeshVID[RMTri.V1],
+                    RealtimeMeshToDynamicMeshVID[RMTri.V2]
+                );
+            }
+
+            // Handle Attributes
+            if (TangentsStream || TexCoordsStream || ColorStream)
+            {
+                EditMesh.EnableAttributes();
+
+                UE::Geometry::FDynamicMeshNormalOverlay* NormalOverlay = nullptr;
+                UE::Geometry::FDynamicMeshNormalOverlay* TangentOverlay = nullptr;
+                UE::Geometry::FDynamicMeshUVOverlay* UVOverlay = nullptr;
+                UE::Geometry::FDynamicMeshColorOverlay* ColorOverlay = nullptr;
+
+
+                if (TangentsStream)
+                {
+                    NormalOverlay = EditMesh.Attributes()->PrimaryNormals();
+                    TangentOverlay = EditMesh.Attributes()->PrimaryTangents();
+                    //NormalOverlay->SetNumLayers(1); // Ensure primary layer exists
+                    //TangentOverlay->SetNumLayers(1); // Ensure primary layer exists
+                    EditMesh.Attributes()->EnableTangents(); // Normals + Tangents
+                }
+                if (TexCoordsStream)
+                {
+                    UVOverlay = EditMesh.Attributes()->PrimaryUV();
+                    //UVOverlay->SetNumLayers(TexCoordsStream->GetNumElements()); // Match number of UV channels
+                }
+                if (ColorStream)
+                {
+                    ColorOverlay = EditMesh.Attributes()->PrimaryColors();
+                    //ColorOverlay->SetNumLayers(1); // Ensure primary layer exists
+                    EditMesh.Attributes()->EnablePrimaryColors();
+                }
+
+                // Iterate through RealtimeMesh triangles to set attributes
+                RealtimeMesh::TRealtimeMeshStreamBuilder<const RealtimeMesh::TIndex3<uint32>> RMTriangleBuilder(*TriangleStream);
+                for (int32 TriIdx = 0; TriIdx < RMTriangleBuilder.Num(); ++TriIdx)
+                {
+                    const RealtimeMesh::TIndex3<uint32> RMTri = RMTriangleBuilder[TriIdx];
+
+                    FVector3d CornerNormals[3];
+                    FVector3d CornerTangents[3];
+                    FVector2d CornerUVs[3];
+                    FVector4f CornerColors[3];
+
+
+                    for (int32 Corner = 0; Corner < 3; ++Corner)
+                    {
+                        const int32 RMVertexIndex = RMTri[Corner];
+
+                        // Get Normal and Tangent from RealtimeMesh
+                        if (TangentsStream)
+                        {
+                            const RealtimeMesh::TRealtimeMeshTangents<FPackedNormal> RMTangents = TangentsStream->GetDataAtVertex<RealtimeMesh::TRealtimeMeshTangents<FPackedNormal>>(RMVertexIndex)[0];
+                            CornerNormals[Corner] = (FVector3d)RMTangents.GetNormal();
+                            CornerTangents[Corner] = (FVector3d)RMTangents.GetTangent();
+                        }
+                        else
+                        {
+                            CornerNormals[Corner] = FVector3d::UpVector;
+                            CornerTangents[Corner] = FVector3d::RightVector;
+                        }
+
+                        // Get UV from RealtimeMesh
+                        if (TexCoordsStream)
+                        {
+                            // Assuming only one UV channel for simplicity, extend for more if needed
+                            const FVector2DHalf RMUV = TexCoordsStream->GetDataAtVertex<FVector2DHalf>(RMVertexIndex, 0)[0];
+                            CornerUVs[Corner] = (FVector2d)RMUV;
+                        }
+                        else
+                        {
+                            CornerUVs[Corner] = FVector2d::Zero();
+                        }
+
+                        // Get Color from RealtimeMesh
+                        if (ColorStream)
+                        {
+                            const FColor RMColor = ColorStream->GetDataAtVertex<FColor>(RMVertexIndex)[0];
+                            CornerColors[Corner] = RMColor.ReinterpretAsLinear();
+                        }
+                        else
+                        {
+                            CornerColors[Corner] = FVector4f(FLinearColor::White);
+                        }
+                    }
+
+                    if (NormalOverlay && TangentOverlay) {
+                        NormalOverlay->SetTriangle(
+                            TriIdx,
+                            UE::Geometry::FIndex3i(
+                                NormalOverlay->AppendElement(FVector3f(CornerNormals[0])),
+                                NormalOverlay->AppendElement(FVector3f(CornerNormals[1])),
+                                NormalOverlay->AppendElement(FVector3f(CornerNormals[2]))
+                            ),
+                            true
+                        );
+
+                        TangentOverlay->SetTriangle(
+                            TriIdx,
+                            UE::Geometry::FIndex3i(
+                                TangentOverlay->AppendElement(FVector3f(CornerTangents[0])),
+                                TangentOverlay->AppendElement(FVector3f(CornerTangents[1])),
+                                TangentOverlay->AppendElement(FVector3f(CornerTangents[2]))
+                            ),
+                            true
+                        );
+                    } if (UVOverlay) {
+                        UVOverlay->SetTriangle(
+                            TriIdx,
+                            UE::Geometry::FIndex3i(
+                                UVOverlay->AppendElement(FVector2f(CornerUVs[0])),
+                                UVOverlay->AppendElement(FVector2f(CornerUVs[1])),
+                                UVOverlay->AppendElement(FVector2f(CornerUVs[2]))
+                            ),
+                            true
+                        );
+                    } if (ColorOverlay) {
+                        ColorOverlay->SetTriangle(
+                            TriIdx,
+                            UE::Geometry::FIndex3i(
+                                ColorOverlay->AppendElement(FVector4f(CornerColors[0])),
+                                ColorOverlay->AppendElement(FVector4f(CornerColors[1])),
+                                ColorOverlay->AppendElement(FVector4f(CornerColors[2]))
+                            ),
+                            true
+                        );
+                    }
+                }
+                UE::Geometry::FCompactMaps CompactInfo;
+                EditMesh.CompactInPlace(&CompactInfo);
+                EditMesh.Attributes()->CompactInPlace(CompactInfo);// Commit changes to attributes
+            }
+    }); // End EditMesh
+
+    // Notify component that mesh has been modified
+    DynamicMeshComp->NotifyMeshModified();
+    DynamicMeshComp->UpdateCollision(true); // Rebuild collision if desired
 }
