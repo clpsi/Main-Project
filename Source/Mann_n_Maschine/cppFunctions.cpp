@@ -562,8 +562,8 @@ URealtimeMeshSimple* UcppFunctions::ConvertToRMC(UObject* WorldContextObject, UD
                 .SetColor(Color)
                 .GetIndex();
 
-            // Store the index for triangle construction
-            Builder.SetTriangle(Builder.NumTriangles(), RealtimeMeshVertexIndex, RealtimeMeshVertexIndex, RealtimeMeshVertexIndex); // Placeholder, will be overwritten
+            // This is used for updating existing triangle, which there are none yet
+            //Builder.SetTriangle(Builder.NumTriangles(), RealtimeMeshVertexIndex, RealtimeMeshVertexIndex, RealtimeMeshVertexIndex); // Placeholder, will be overwritten
         }
 
         // Add the triangle using the last three added vertices
@@ -794,4 +794,5 @@ void UcppFunctions::ConvertToDMC(UDynamicMeshComponent* DynamicMeshComp, URealti
     // Notify component that mesh has been modified
     DynamicMeshComp->NotifyMeshModified();
     DynamicMeshComp->UpdateCollision(true); // Rebuild collision if desired
+
 }
