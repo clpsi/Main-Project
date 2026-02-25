@@ -1,0 +1,8 @@
+https://forums.unrealengine.com/t/mesh-has-some-nearly-zero-tangents-bi-normals/143600/6
+Blender Export:
+No double vertices (By distance)
+Apply all transform
+Ctrl T to make all faces triangular
+Smooth Faces/Edges
+Unreal Import:
+Normals & Tangents
