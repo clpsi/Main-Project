@@ -580,6 +580,15 @@ URealtimeMeshSimple* UcppFunctions::ConvertToRMC(UObject* WorldContextObject, UD
     const FRealtimeMeshSectionGroupKey SectionGroupKey = FRealtimeMeshSectionGroupKey::Create(0, "ConvertedDynamicMesh");
     RealtimeMesh->CreateSectionGroup(SectionGroupKey, StreamSet);
 
+    // Enable collision for the first section (polygroup 0)
+    const FRealtimeMeshSectionKey SectionKey = FRealtimeMeshSectionKey::CreateForPolyGroup(SectionGroupKey, 0);
+    RealtimeMesh->UpdateSectionConfig(SectionKey, FRealtimeMeshSectionConfig(), true);
+
+    // Setup collision configuration
+    FRealtimeMeshCollisionConfiguration CollisionConfig;
+    CollisionConfig.bUseComplexAsSimpleCollision = true;
+    RealtimeMesh->SetCollisionConfig(CollisionConfig);
+
     return RealtimeMesh;
 }
 
@@ -796,3 +805,4 @@ void UcppFunctions::ConvertToDMC(UDynamicMeshComponent* DynamicMeshComp, URealti
     DynamicMeshComp->UpdateCollision(true); // Rebuild collision if desired
 
 }
+
