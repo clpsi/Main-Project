@@ -1,0 +1,50 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "Polygroups/PolygroupSet.h"
+
+#include "Components/DynamicMeshComponent.h"
+#include "DynamicMesh/DynamicAttribute.h"
+#include "DynamicMesh/DynamicMeshAttributeSet.h"
+#include "DynamicMesh/DynamicMesh3.h"
+#include "RealtimeMeshComponent.h"
+#include "RealtimeMeshSimple.h"
+
+#include "Math/Quat.h"
+#include "Engine/World.h"
+
+#include "cppFunctions.generated.h"
+
+/**
+ * 
+ */
+UCLASS()
+class DUSTED_API UcppFunctions : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+	
+public:
+	UFUNCTION(BlueprintCallable)
+	static bool CopyPolygroupToMesh(UDynamicMeshComponent* InputComponent, UDynamicMeshComponent* TargetComponent, int32 Polygroup);
+	UFUNCTION(BlueprintCallable)
+	static bool SweepComponent(UPrimitiveComponent* ComponentToSweep, const FVector& Start, const FVector& End, const FQuat& Rot, ECollisionChannel TraceChannel, TArray<FHitResult>& OutHits);
+	UFUNCTION(BlueprintCallable)
+	static bool TraceFromInsideMesh(AActor* ActorToIgnore, bool ShouldIgnore, const FVector& Start, const FVector& End, FHitResult& OutHit);
+	UFUNCTION(BlueprintCallable)
+	static void NumPolygroups(UDynamicMeshComponent* InputComponent, TArray<int32>& PolygroupIDs);
+	UFUNCTION(BlueprintCallable)
+	static void FillHolesInDynamicMeshComponent(UDynamicMeshComponent* InputComponent);
+	UFUNCTION(BlueprintCallable)
+	static void MoveVertices(UDynamicMeshComponent* InputComponent, float Amount, int32 xAmount, int32 yAmount);
+	UFUNCTION(BlueprintCallable)
+	static void CalculateSurface(UDynamicMeshComponent* InputComponent);
+	UFUNCTION(BlueprintCallable)
+	static void SaveStaticMesh(UStaticMesh* Mesh, const FString& AssetName, const FString& PackagePath);
+	UFUNCTION(BlueprintCallable)
+	static URealtimeMeshSimple* ConvertToRMC(UObject* WorldContext, UDynamicMeshComponent* DynamicMeshComp);
+	UFUNCTION(BlueprintCallable)
+	static void ConvertToDMC(UDynamicMeshComponent* DynamicMeshComp, URealtimeMeshSimple* RealtimeMesh);
+};
