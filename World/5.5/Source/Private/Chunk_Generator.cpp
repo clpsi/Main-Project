@@ -1,15 +1,28 @@
 #include "Chunk_Generator.h"
 
 #include "Async/Async.h"
+#include "Noise_Generator.h"
 
 
 Chunk_Generator::Chunk_Generator(
     int32 InResolution,
     float InChunkSize,
-    const FVector& InChunkLocation)
+    const FVector& InChunkLocation,
+
+    float InNoiseFrequency,
+    int32 InNoiseOctaves,
+    float InNoiseLacunarity,
+    float InNoisePersistence,
+    float InNoiseHeightScale)
     : Resolution(InResolution)
     , ChunkSize(InChunkSize)
     , ChunkLocation(InChunkLocation)
+
+    , NoiseFrequency(InNoiseFrequency)
+    , NoiseOctaves(InNoiseOctaves)
+    , NoiseLacunarity(InNoiseLacunarity)
+    , NoisePersistence(InNoisePersistence)
+    , NoiseHeightScale(InNoiseHeightScale)
 {
 }
 
@@ -248,10 +261,18 @@ void Chunk_Generator::GenerateVertices()
 
 
             /*
-             * Terrain height will eventually come from
-             * your separate noise system.
-             */
-            const float Height = 0.0f;
+            * Ask the terrain system for the height.
+            */
+            const float Height = FNoise_Generator::GetHeight(
+                    LocalX + ChunkLocation.X,
+                    LocalY + ChunkLocation.Y,
+
+                    NoiseFrequency,
+                    NoiseOctaves,
+                    NoiseLacunarity,
+                    NoisePersistence,
+                    NoiseHeightScale
+                );
 
 
             Vertices.Add(

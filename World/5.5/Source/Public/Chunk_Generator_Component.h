@@ -62,6 +62,8 @@ public:
 
 protected:
 
+    virtual void BeginPlay() override;
+
     virtual void EndPlay(
         const EEndPlayReason::Type EndPlayReason
     ) override;
@@ -145,6 +147,54 @@ public:
         Category = "Chunk Generation"
     )
     float ChunkSize = 1000.0f;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    int32 NoiseSeed = 123456;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    float NoiseFrequency = 0.00008f;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    int32 NoiseOctaves = 6;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    float NoiseLacunarity = 2.0f;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    float NoisePersistence = 0.5f;
+
+
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Terrain Noise"
+    )
+    float NoiseHeightScale = 500.0f;
 
 
 public:

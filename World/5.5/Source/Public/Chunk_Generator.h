@@ -23,8 +23,13 @@ public:
     Chunk_Generator(
         int32 InResolution,
         float InChunkSize,
-        const FVector& InChunkLocation
-    );
+        const FVector& InChunkLocation,
+
+        float InNoiseFrequency,
+        int32 InNoiseOctaves,
+        float InNoiseLacunarity,
+        float InNoisePersistence,
+        float InNoiseHeightScale);
 
     ~Chunk_Generator();
 
@@ -90,7 +95,7 @@ private:
 private:
 
     // ============================================================
-    // PARAMETERS
+    // CHUNK PARAMETERS
     // ============================================================
 
     int32 Resolution = 0;
@@ -98,6 +103,20 @@ private:
     float ChunkSize = 0.0f;
 
     FVector ChunkLocation = FVector::ZeroVector;
+
+    // ============================================================
+    // NOISE PARAMETERS
+    // ============================================================
+
+    float NoiseFrequency;
+
+    int32 NoiseOctaves;
+
+    float NoiseLacunarity;
+
+    float NoisePersistence;
+
+    float NoiseHeightScale;
 
 
     // ============================================================

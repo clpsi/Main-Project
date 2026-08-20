@@ -1,6 +1,9 @@
 #include "Chunk_Generator_Component.h"
 
 #include "Chunk_Generator.h"
+#include "Noise_Generator.h"
+
+
 
 
 UChunk_Generator_Component::UChunk_Generator_Component()
@@ -12,6 +15,16 @@ UChunk_Generator_Component::UChunk_Generator_Component()
 // ============================================================================
 // END PLAY
 // ============================================================================
+
+void UChunk_Generator_Component::BeginPlay()
+{
+    Super::BeginPlay();
+
+    FNoise_Generator::Initialize(
+        NoiseSeed
+    );
+}
+
 
 void UChunk_Generator_Component::EndPlay(
     const EEndPlayReason::Type EndPlayReason)
@@ -65,7 +78,13 @@ void UChunk_Generator_Component::GenerateChunk(
         MakeShared<Chunk_Generator>(
             Resolution,
             ChunkSize,
-            ChunkLocation
+            ChunkLocation,
+
+            NoiseFrequency,
+            NoiseOctaves,
+            NoiseLacunarity,
+            NoisePersistence,
+            NoiseHeightScale
         );
 
 
