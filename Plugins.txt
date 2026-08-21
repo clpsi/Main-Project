@@ -1,4 +1,3 @@
 Audio Analysis Tool
 Geometry Script
 RealtimeMeshComponent
-https://github.com/mnemonic-re/SimplexNoise
