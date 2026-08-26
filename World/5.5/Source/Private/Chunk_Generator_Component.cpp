@@ -195,7 +195,8 @@ void UChunk_Generator_Component::EndPlay(
 
 void UChunk_Generator_Component::GenerateChunk(
     int32 ChunkX,
-    int32 ChunkY
+    int32 ChunkY,
+    int32 ResolutionDivisor
 )
 {
     const FIntPoint ChunkCoordinate(
@@ -219,6 +220,8 @@ void UChunk_Generator_Component::GenerateChunk(
     // ========================================================================
     // RESOLUTION
     // ========================================================================
+
+    ResolutionDivisor = FMath::RoundUpToPowerOfTwo(FMath::Clamp(ResolutionDivisor, 1, 16));
 
     const int32 SafeDivisor =
         FMath::Max(

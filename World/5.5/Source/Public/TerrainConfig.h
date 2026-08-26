@@ -28,7 +28,7 @@ namespace TerrainConfig
     // ========================================================================
 
     /*
-     * Complete physical repeat distance of the terrain.
+     * Complete physical repeat distance of the terrain in METERS not CM!
      *
      * The terrain repeats every 25.6 km in both X and Y.
      */
@@ -39,7 +39,7 @@ namespace TerrainConfig
     // GLOBAL HEIGHT
     // ========================================================================
 
-    constexpr float HeightScale = 2000.0f;
+    constexpr float HeightScale = 1000.0f;
 
 
     // ========================================================================
@@ -124,7 +124,7 @@ namespace TerrainConfig
     constexpr int32 DetailCells = 102;
     constexpr int32 DetailOctaves = 3;
 
-    constexpr float DetailHeight = 0.01f;
+    constexpr float DetailHeight = 0.1f;
 
 
     // ========================================================================

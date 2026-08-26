@@ -78,7 +78,8 @@ public:
     )
     void GenerateChunk(
         int32 ChunkX,
-        int32 ChunkY
+        int32 ChunkY,
+        int32 ResolutionDivisor
     );
 
 
@@ -137,28 +138,6 @@ public:
     )
     int32 Resolution = 64;
 
-
-    /*
-     * Resolution divisor provides a simple LOD mechanism.
-     *
-     * Example:
-     *
-     *     Resolution = 64
-     *     Divisor = 1 -> 64
-     *     Divisor = 2 -> 32
-     *     Divisor = 4 -> 16
-     *     Divisor = 8 -> 8
-     */
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Chunk Generation",
-        meta = (
-            ClampMin = "1",
-            UIMin = "1"
-            )
-    )
-    int32 ResolutionDivisor = 1;
 
 
     /*

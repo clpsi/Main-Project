@@ -812,6 +812,10 @@ float FNoise_Generator::GetHeight(
     float WorldY
 )
 {
+
+    WorldX *= 0.01f;
+    WorldY *= 0.01f;
+
     // ========================================================================
     // CONTINENTALNESS
     // ========================================================================
@@ -1017,5 +1021,6 @@ float FNoise_Generator::GetHeight(
 
 
     return Height
-        * TerrainConfig::HeightScale;
+        * TerrainConfig::HeightScale
+        * 100.0f;
 }

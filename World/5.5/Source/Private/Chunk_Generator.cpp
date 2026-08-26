@@ -275,9 +275,6 @@ void Chunk_Generator::GenerateVertices()
     // GENERATE GRID
     // ========================================================================
 
-    float WorldY =
-        ChunkWorldY;
-
 
     for (int32 Y = 0; Y <= Resolution; ++Y)
     {
@@ -287,8 +284,9 @@ void Chunk_Generator::GenerateVertices()
         }
 
 
-        float WorldX =
-            ChunkWorldX;
+        const float WorldY =
+            ChunkWorldY +
+            static_cast<float>(Y) * Step;
 
 
         const float V =
@@ -302,6 +300,11 @@ void Chunk_Generator::GenerateVertices()
             {
                 return;
             }
+
+
+            const float WorldX =
+                ChunkWorldX +
+                static_cast<float>(X) * Step;
 
 
             const int32 Index =
@@ -346,20 +349,7 @@ void Chunk_Generator::GenerateVertices()
                     V
                 );
 
-
-            // ================================================================
-            // NEXT X
-            // ================================================================
-
-            WorldX += Step;
         }
-
-
-        // ====================================================================
-        // NEXT Y
-        // ====================================================================
-
-        WorldY += Step;
     }
 }
 
@@ -476,48 +466,29 @@ void Chunk_Generator::GenerateTriangles()
 
 void Chunk_Generator::GenerateNormals()
 {
-    if (Vertices.Num() == 0)
+    if (Vertices.Num() == 0 || Resolution <= 0)
     {
         return;
     }
 
-
     const int32 VerticesPerSide =
         Resolution + 1;
-
 
     Normals.SetNumUninitialized(
         Vertices.Num()
     );
 
-
-    // ========================================================================
-    // GRID SPACING
-    // ========================================================================
-
     const float Step =
         ChunkSize /
         static_cast<float>(Resolution);
 
+    const float ChunkWorldX =
+        static_cast<float>(ChunkCoordinate.X)
+        * ChunkSize;
 
-    /*
-     * This is the Z component of the tangent-derived normal.
-     *
-     * For:
-     *
-     *     N = (-dH/dX, -dH/dY, 1)
-     *
-     * using central differences gives us:
-     *
-     *     (-dX, -dY, 2 * Step)
-     */
-    const float NormalZ =
-        2.0f * Step;
-
-
-    // ========================================================================
-    // CALCULATE NORMALS
-    // ========================================================================
+    const float ChunkWorldY =
+        static_cast<float>(ChunkCoordinate.Y)
+        * ChunkSize;
 
     for (int32 Y = 0; Y <= Resolution; ++Y)
     {
@@ -526,6 +497,9 @@ void Chunk_Generator::GenerateNormals()
             return;
         }
 
+        const float WorldY =
+            ChunkWorldY +
+            static_cast<float>(Y) * Step;
 
         for (int32 X = 0; X <= Resolution; ++X)
         {
@@ -534,70 +508,40 @@ void Chunk_Generator::GenerateNormals()
                 return;
             }
 
-
             const int32 Index =
                 Y * VerticesPerSide + X;
 
+            const float WorldX =
+                ChunkWorldX +
+                static_cast<float>(X) * Step;
 
             // ================================================================
-            // NEIGHBOUR COORDINATES
-            // ================================================================
-
-            const int32 LeftX =
-                FMath::Max(
-                    X - 1,
-                    0
-                );
-
-
-            const int32 RightX =
-                FMath::Min(
-                    X + 1,
-                    Resolution
-                );
-
-
-            const int32 DownY =
-                FMath::Max(
-                    Y - 1,
-                    0
-                );
-
-
-            const int32 UpY =
-                FMath::Min(
-                    Y + 1,
-                    Resolution
-                );
-
-
-            // ================================================================
-            // NEIGHBOUR HEIGHTS
+            // SAMPLE GLOBAL TERRAIN
             // ================================================================
 
             const float HeightLeft =
-                Vertices[
-                    Y * VerticesPerSide + LeftX
-                ].Z;
-
+                FNoise_Generator::GetHeight(
+                    WorldX - Step,
+                    WorldY
+                );
 
             const float HeightRight =
-                Vertices[
-                    Y * VerticesPerSide + RightX
-                ].Z;
-
+                FNoise_Generator::GetHeight(
+                    WorldX + Step,
+                    WorldY
+                );
 
             const float HeightDown =
-                Vertices[
-                    DownY * VerticesPerSide + X
-                ].Z;
-
+                FNoise_Generator::GetHeight(
+                    WorldX,
+                    WorldY - Step
+                );
 
             const float HeightUp =
-                Vertices[
-                    UpY * VerticesPerSide + X
-                ].Z;
-
+                FNoise_Generator::GetHeight(
+                    WorldX,
+                    WorldY + Step
+                );
 
             // ================================================================
             // CENTRAL DIFFERENCES
@@ -607,11 +551,9 @@ void Chunk_Generator::GenerateNormals()
                 HeightRight -
                 HeightLeft;
 
-
             const float DY =
                 HeightUp -
                 HeightDown;
-
 
             // ================================================================
             // NORMAL
@@ -620,9 +562,8 @@ void Chunk_Generator::GenerateNormals()
             FVector Normal(
                 -DX,
                 -DY,
-                NormalZ
+                2.0f * Step
             );
-
 
             Normals[Index] =
                 Normal.GetSafeNormal();
