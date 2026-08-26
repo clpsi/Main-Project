@@ -13,7 +13,7 @@ class Chunk_Generator;
 // BLUEPRINT EVENT
 // ============================================================================
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_EightParams(
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_SixParams(
     FOnChunkGenerated,
 
     int32,
@@ -32,14 +32,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_EightParams(
     Normals,
 
     const TArray<FVector2D>&,
-    UV0,
-
-    const TArray<FVector>&,
-    CollisionVertices,
-
-    const TArray<int32>&,
-    CollisionTriangles
+    UV0
 );
+
 
 
 // ============================================================================
@@ -50,7 +45,8 @@ UCLASS(
     ClassGroup = (ProceduralTerrain),
     meta = (BlueprintSpawnableComponent)
 )
-class LANDSCAPE_PROJ_API UChunk_Generator_Component : public UActorComponent
+class LANDSCAPE_PROJ_API UChunk_Generator_Component
+    : public UActorComponent
 {
     GENERATED_BODY()
 
@@ -64,6 +60,7 @@ protected:
 
     virtual void BeginPlay() override;
 
+
     virtual void EndPlay(
         const EEndPlayReason::Type EndPlayReason
     ) override;
@@ -71,9 +68,9 @@ protected:
 
 public:
 
-    // ================================================================
+    // ========================================================================
     // GENERATION
-    // ================================================================
+    // ========================================================================
 
     UFUNCTION(
         BlueprintCallable,
@@ -85,9 +82,9 @@ public:
     );
 
 
-    // ================================================================
+    // ========================================================================
     // CANCELLATION
-    // ================================================================
+    // ========================================================================
 
     UFUNCTION(
         BlueprintCallable,
@@ -106,9 +103,9 @@ public:
     void CancelAllChunks();
 
 
-    // ================================================================
+    // ========================================================================
     // STATE
-    // ================================================================
+    // ========================================================================
 
     UFUNCTION(
         BlueprintPure,
@@ -129,9 +126,9 @@ public:
 
 public:
 
-    // ================================================================
-    // SETTINGS
-    // ================================================================
+    // ========================================================================
+    // CHUNK SETTINGS
+    // ========================================================================
 
     UPROPERTY(
         EditAnywhere,
@@ -141,67 +138,69 @@ public:
     int32 Resolution = 64;
 
 
+    /*
+     * Resolution divisor provides a simple LOD mechanism.
+     *
+     * Example:
+     *
+     *     Resolution = 64
+     *     Divisor = 1 -> 64
+     *     Divisor = 2 -> 32
+     *     Divisor = 4 -> 16
+     *     Divisor = 8 -> 8
+     */
     UPROPERTY(
         EditAnywhere,
         BlueprintReadWrite,
-        Category = "Chunk Generation"
+        Category = "Chunk Generation",
+        meta = (
+            ClampMin = "1",
+            UIMin = "1"
+            )
+    )
+    int32 ResolutionDivisor = 1;
+
+
+    /*
+     * Physical dimensions of one chunk.
+     *
+     * The resolution changes sampling density, but this physical
+     * size remains unchanged.
+     */
+    UPROPERTY(
+        EditAnywhere,
+        BlueprintReadWrite,
+        Category = "Chunk Generation",
+        meta = (
+            ClampMin = "1.0",
+            UIMin = "1.0"
+            )
     )
     float ChunkSize = 1000.0f;
 
 
+    // ========================================================================
+    // TERRAIN
+    // ========================================================================
+
+    /*
+     * Global deterministic terrain seed.
+     *
+     * This is passed to FNoise_Generator once during BeginPlay.
+     */
     UPROPERTY(
         EditAnywhere,
         BlueprintReadWrite,
-        Category = "Terrain Noise"
+        Category = "Terrain"
     )
     int32 NoiseSeed = 123456;
 
 
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Terrain Noise"
-    )
-    float NoiseFrequency = 0.00008f;
-
-
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Terrain Noise"
-    )
-    int32 NoiseOctaves = 6;
-
-
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Terrain Noise"
-    )
-    float NoiseLacunarity = 2.0f;
-
-
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Terrain Noise"
-    )
-    float NoisePersistence = 0.5f;
-
-
-    UPROPERTY(
-        EditAnywhere,
-        BlueprintReadWrite,
-        Category = "Terrain Noise"
-    )
-    float NoiseHeightScale = 500.0f;
-
-
 public:
 
-    // ================================================================
+    // ========================================================================
     // EVENTS
-    // ================================================================
+    // ========================================================================
 
     UPROPERTY(
         BlueprintAssignable,
@@ -212,9 +211,9 @@ public:
 
 private:
 
-    // ================================================================
+    // ========================================================================
     // ACTIVE GENERATORS
-    // ================================================================
+    // ========================================================================
 
     TMap<
         FIntPoint,

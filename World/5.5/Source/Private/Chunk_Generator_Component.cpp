@@ -4,7 +4,9 @@
 #include "Noise_Generator.h"
 
 
-
+// ============================================================================
+// CONSTRUCTOR
+// ============================================================================
 
 UChunk_Generator_Component::UChunk_Generator_Component()
 {
@@ -13,23 +15,173 @@ UChunk_Generator_Component::UChunk_Generator_Component()
 
 
 // ============================================================================
-// END PLAY
+// BEGIN PLAY
 // ============================================================================
 
 void UChunk_Generator_Component::BeginPlay()
 {
     Super::BeginPlay();
 
+
+    /*
+     * Initialize the global terrain seed.
+     *
+     * This should remain unchanged after initialization.
+     */
     FNoise_Generator::Initialize(
         NoiseSeed
     );
+
+    // ========================================================================
+    // DEBUG: TEST WORLD REPEAT
+    // ========================================================================
+
+    /*const float Repeat = TerrainConfig::WorldRepeatSize;
+
+    // Arbitrary test coordinate
+    const float X = 123.45f;
+    const float Y = 678.90f;
+
+    // --- Explicit origin tests ---
+
+    const float Height_00 =
+        FNoise_Generator::GetHeight(
+            0.0f,
+            0.0f
+        );
+
+    const float Height_RepeatX =
+        FNoise_Generator::GetHeight(
+            Repeat,
+            0.0f
+        );
+
+    const float Height_RepeatY =
+        FNoise_Generator::GetHeight(
+            0.0f,
+            Repeat
+        );
+
+
+    // --- Arbitrary X/Y tests ---
+
+    const float Height_XY =
+        FNoise_Generator::GetHeight(
+            X,
+            Y
+        );
+
+    const float Height_XRepeatY =
+        FNoise_Generator::GetHeight(
+            X + Repeat,
+            Y
+        );
+
+    const float Height_XYRepeat =
+        FNoise_Generator::GetHeight(
+            X,
+            Y + Repeat
+        );
+
+    const float Height_XRepeatYRepeat =
+        FNoise_Generator::GetHeight(
+            X + Repeat,
+            Y + Repeat
+        );
+
+
+    // ========================================================================
+    // LOG RESULTS
+    // ========================================================================
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("========== NOISE REPEAT DEBUG ==========")
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("WorldRepeatSize: %f"),
+        Repeat
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(0, 0)                         = %f"),
+        Height_00
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(Repeat, 0)                   = %f"),
+        Height_RepeatX
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(0, Repeat)                   = %f"),
+        Height_RepeatY
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(%f, %f)                     = %f"),
+        X,
+        Y,
+        Height_XY
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(%f + Repeat, %f)             = %f"),
+        X,
+        Y,
+        Height_XRepeatY
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(%f, %f + Repeat)             = %f"),
+        X,
+        Y,
+        Height_XYRepeat
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("GetHeight(%f + Repeat, %f + Repeat)    = %f"),
+        X,
+        Y,
+        Height_XRepeatYRepeat
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("=========================================")
+    );*/
 }
 
 
+// ============================================================================
+// END PLAY
+// ============================================================================
+
 void UChunk_Generator_Component::EndPlay(
-    const EEndPlayReason::Type EndPlayReason)
+    const EEndPlayReason::Type EndPlayReason
+)
 {
     CancelAllChunks();
+
 
     Super::EndPlay(
         EndPlayReason
@@ -43,7 +195,8 @@ void UChunk_Generator_Component::EndPlay(
 
 void UChunk_Generator_Component::GenerateChunk(
     int32 ChunkX,
-    int32 ChunkY)
+    int32 ChunkY
+)
 {
     const FIntPoint ChunkCoordinate(
         ChunkX,
@@ -51,40 +204,47 @@ void UChunk_Generator_Component::GenerateChunk(
     );
 
 
-    /*
-     * Don't generate the same chunk twice.
-     */
+    // ========================================================================
+    // DUPLICATE CHECK
+    // ========================================================================
+
     if (ActiveGenerators.Contains(
-        ChunkCoordinate))
+        ChunkCoordinate
+    ))
     {
         return;
     }
 
 
-    /*
-     * Convert chunk coordinates into world space.
-     *
-     * This can later be adjusted if your terrain uses another
-     * coordinate convention.
-     */
-    const FVector ChunkLocation(
-        static_cast<float>(ChunkX) * ChunkSize,
-        static_cast<float>(ChunkY) * ChunkSize,
-        0.0f
-    );
+    // ========================================================================
+    // RESOLUTION
+    // ========================================================================
 
+    const int32 SafeDivisor =
+        FMath::Max(
+            1,
+            ResolutionDivisor
+        );
+
+
+    const int32 ActualResolution =
+        FMath::Max(
+            1,
+            Resolution / SafeDivisor
+        );
+
+
+    // ========================================================================
+    // GENERATOR
+    // ========================================================================
 
     TSharedPtr<Chunk_Generator> Generator =
         MakeShared<Chunk_Generator>(
-            Resolution,
+            ActualResolution,
             ChunkSize,
-            ChunkLocation,
 
-            NoiseFrequency,
-            NoiseOctaves,
-            NoiseLacunarity,
-            NoisePersistence,
-            NoiseHeightScale
+            ChunkX,
+            ChunkY
         );
 
 
@@ -94,27 +254,31 @@ void UChunk_Generator_Component::GenerateChunk(
     );
 
 
-    /*
-     * Weak reference to this component.
-     *
-     * If the component disappears while generation is running,
-     * the completion callback simply does nothing.
-     */
+    // ========================================================================
+    // WEAK COMPONENT REFERENCE
+    // ========================================================================
+
     TWeakObjectPtr<UChunk_Generator_Component>
         WeakThis(this);
 
+
+    // ========================================================================
+    // GENERATE
+    // ========================================================================
 
     Generator->GenerateAsync(
         [
             WeakThis,
                 ChunkCoordinate,
                 Generator
-        ](bool bWasCancelled)
+        ](
+            bool bWasCancelled
+            )
         {
-            /*
-             * This callback is guaranteed to run on the
-             * Game Thread by Chunk_Generator.
-             */
+            // =================================================================
+            // COMPONENT VALIDITY
+            // =================================================================
+
             UChunk_Generator_Component* Component =
                 WeakThis.Get();
 
@@ -125,29 +289,30 @@ void UChunk_Generator_Component::GenerateChunk(
             }
 
 
-            /*
-             * If cancellation occurred, don't send incomplete
-             * data to Blueprint.
-             */
+            // =================================================================
+            // CANCELLATION
+            // =================================================================
+
             if (bWasCancelled)
             {
                 /*
-                 * The chunk may already have been removed by
-                 * CancelChunk(), so Remove() is harmless.
+                 * The chunk may already have been removed by CancelChunk().
+                 *
+                 * Remove() is therefore intentionally harmless here.
                  */
                 Component->ActiveGenerators.Remove(
                     ChunkCoordinate
                 );
 
+
                 return;
             }
 
 
-            /*
-             * Copy the generated data.
-             *
-             * We are on the Game Thread now.
-             */
+            // =================================================================
+            // COPY GENERATED DATA
+            // =================================================================
+
             const TArray<FVector> Vertices =
                 Generator->Vertices;
 
@@ -164,25 +329,20 @@ void UChunk_Generator_Component::GenerateChunk(
                 Generator->UV0;
 
 
-            const TArray<FVector> CollisionVertices =
-                Generator->CollisionVertices;
 
+            // =================================================================
+            // REMOVE FROM ACTIVE
+            // =================================================================
 
-            const TArray<int32> CollisionTriangles =
-                Generator->CollisionTriangles;
-
-
-            /*
-             * Generation is no longer active.
-             */
             Component->ActiveGenerators.Remove(
                 ChunkCoordinate
             );
 
 
-            /*
-             * Notify Blueprint.
-             */
+            // =================================================================
+            // BLUEPRINT EVENT
+            // =================================================================
+
             Component->OnChunkGenerated.Broadcast(
                 ChunkCoordinate.X,
                 ChunkCoordinate.Y,
@@ -190,13 +350,10 @@ void UChunk_Generator_Component::GenerateChunk(
                 Vertices,
                 Triangles,
                 Normals,
-                UV0,
-
-                CollisionVertices,
-                CollisionTriangles
+                UV0
             );
         }
-            );
+    );
 }
 
 
@@ -206,7 +363,8 @@ void UChunk_Generator_Component::GenerateChunk(
 
 void UChunk_Generator_Component::CancelChunk(
     int32 ChunkX,
-    int32 ChunkY)
+    int32 ChunkY
+)
 {
     const FIntPoint ChunkCoordinate(
         ChunkX,
@@ -230,17 +388,16 @@ void UChunk_Generator_Component::CancelChunk(
         *GeneratorPtr;
 
 
-    /*
-     * Request cancellation.
-     */
-    Generator->Cancel();
+    if (Generator.IsValid())
+    {
+        Generator->Cancel();
+    }
 
 
     /*
-     * Remove it from the active set immediately.
+     * Remove immediately from the active map.
      *
-     * The generator itself is still alive because the asynchronous
-     * task owns a shared reference to it.
+     * The asynchronous task still owns a shared reference.
      */
     ActiveGenerators.Remove(
         ChunkCoordinate
@@ -254,9 +411,6 @@ void UChunk_Generator_Component::CancelChunk(
 
 void UChunk_Generator_Component::CancelAllChunks()
 {
-    /*
-     * Request cancellation for every active generator.
-     */
     for (
         const TPair<
         FIntPoint,
@@ -273,10 +427,7 @@ void UChunk_Generator_Component::CancelAllChunks()
 
 
     /*
-     * We don't need to keep them in the active map anymore.
-     *
-     * Their worker tasks still hold shared references until they
-     * have completely stopped.
+     * Worker tasks retain their own shared references until finished.
      */
     ActiveGenerators.Empty();
 }
@@ -288,7 +439,8 @@ void UChunk_Generator_Component::CancelAllChunks()
 
 bool UChunk_Generator_Component::IsChunkGenerating(
     int32 ChunkX,
-    int32 ChunkY) const
+    int32 ChunkY
+) const
 {
     return ActiveGenerators.Contains(
         FIntPoint(
@@ -298,6 +450,8 @@ bool UChunk_Generator_Component::IsChunkGenerating(
     );
 }
 
+
+// ============================================================================
 
 int32 UChunk_Generator_Component::GetActiveChunkCount() const
 {

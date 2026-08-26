@@ -3,17 +3,20 @@
 #include "CoreMinimal.h"
 
 #include <atomic>
+#include <memory>
 
 
-/*
- * Called on the Game Thread after generation has finished.
- *
- * bWasCancelled tells the owner whether the generation completed
- * normally or was cancelled.
- */
+// ============================================================================
+// COMPLETION CALLBACK
+// ============================================================================
+
 using FChunkGenerationComplete =
 TFunction<void(bool bWasCancelled)>;
 
+
+// ============================================================================
+// CHUNK GENERATOR
+// ============================================================================
 
 class Chunk_Generator
     : public TSharedFromThis<Chunk_Generator>
@@ -23,109 +26,88 @@ public:
     Chunk_Generator(
         int32 InResolution,
         float InChunkSize,
-        const FVector& InChunkLocation,
-
-        float InNoiseFrequency,
-        int32 InNoiseOctaves,
-        float InNoiseLacunarity,
-        float InNoisePersistence,
-        float InNoiseHeightScale);
+        int32 InChunkX,
+        int32 InChunkY
+    );
 
     ~Chunk_Generator();
 
 
-    /*
-     * Starts asynchronous generation.
-     *
-     * CompletionCallback is always executed on the Game Thread.
-     */
+    // ========================================================================
+    // ASYNC GENERATION
+    // ========================================================================
+
     void GenerateAsync(
         FChunkGenerationComplete CompletionCallback
     );
 
 
-    /*
-     * Requests cancellation.
-     *
-     * The worker exits at its next cancellation check.
-     */
+    // ========================================================================
+    // CANCELLATION
+    // ========================================================================
+
     void Cancel();
 
-
     bool IsCancelled() const;
+
     bool IsFinished() const;
 
 
 public:
 
-    // ============================================================
-    // GENERATED RENDER DATA
-    // ============================================================
+    // ========================================================================
+    // GENERATED DATA
+    // ========================================================================
 
     TArray<FVector> Vertices;
+
     TArray<int32> Triangles;
+
     TArray<FVector> Normals;
+
     TArray<FVector2D> UV0;
-
-
-    // ============================================================
-    // GENERATED COLLISION DATA
-    // ============================================================
-
-    TArray<FVector> CollisionVertices;
-    TArray<int32> CollisionTriangles;
 
 
 private:
 
-    // ============================================================
+    // ========================================================================
     // GENERATION
-    // ============================================================
+    // ========================================================================
 
     void GenerateVertices();
-    void GenerateTriangles();
-    void GenerateNormals();
-    void GenerateUVs();
-    void GenerateCollision();
 
+    void GenerateTriangles();
+
+    void GenerateNormals();
+
+
+    // ========================================================================
+    // STATE
+    // ========================================================================
 
     bool ShouldStop() const;
 
 
 private:
 
-    // ============================================================
-    // CHUNK PARAMETERS
-    // ============================================================
+    // ========================================================================
+    // CONFIGURATION
+    // ========================================================================
 
     int32 Resolution = 0;
 
     float ChunkSize = 0.0f;
 
-    FVector ChunkLocation = FVector::ZeroVector;
-
-    // ============================================================
-    // NOISE PARAMETERS
-    // ============================================================
-
-    float NoiseFrequency;
-
-    int32 NoiseOctaves;
-
-    float NoiseLacunarity;
-
-    float NoisePersistence;
-
-    float NoiseHeightScale;
+    FIntPoint ChunkCoordinate;
 
 
-    // ============================================================
-    // ASYNC STATE
-    // ============================================================
+    // ========================================================================
+    // STATE
+    // ========================================================================
 
     std::atomic<bool> bCancelRequested{ false };
 
-    std::atomic<bool> bFinished{ false };
-
     std::atomic<bool> bStarted{ false };
+
+    std::atomic<bool> bFinished{ false };
 };

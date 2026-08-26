@@ -4,28 +4,29 @@
 #include "Noise_Generator.h"
 
 
+// ============================================================================
+// CONSTRUCTOR
+// ============================================================================
+
 Chunk_Generator::Chunk_Generator(
     int32 InResolution,
     float InChunkSize,
-    const FVector& InChunkLocation,
-
-    float InNoiseFrequency,
-    int32 InNoiseOctaves,
-    float InNoiseLacunarity,
-    float InNoisePersistence,
-    float InNoiseHeightScale)
+    int32 InChunkX,
+    int32 InChunkY
+)
     : Resolution(InResolution)
     , ChunkSize(InChunkSize)
-    , ChunkLocation(InChunkLocation)
-
-    , NoiseFrequency(InNoiseFrequency)
-    , NoiseOctaves(InNoiseOctaves)
-    , NoiseLacunarity(InNoiseLacunarity)
-    , NoisePersistence(InNoisePersistence)
-    , NoiseHeightScale(InNoiseHeightScale)
+    , ChunkCoordinate(
+        InChunkX,
+        InChunkY
+    )
 {
 }
 
+
+// ============================================================================
+// DESTRUCTOR
+// ============================================================================
 
 Chunk_Generator::~Chunk_Generator()
 {
@@ -38,20 +39,21 @@ Chunk_Generator::~Chunk_Generator()
 // ============================================================================
 
 void Chunk_Generator::GenerateAsync(
-    FChunkGenerationComplete CompletionCallback)
+    FChunkGenerationComplete CompletionCallback
+)
 {
     bool Expected = false;
-
 
     /*
      * A generator represents exactly one generation job.
      *
-     * Prevent accidentally starting the same generator twice.
+     * Prevent the same generator from being started twice.
      */
     if (!bStarted.compare_exchange_strong(
         Expected,
         true,
-        std::memory_order_acq_rel))
+        std::memory_order_acq_rel
+    ))
     {
         return;
     }
@@ -59,7 +61,7 @@ void Chunk_Generator::GenerateAsync(
 
     /*
      * Keep the generator alive until the worker and completion
-     * callback are completely finished with it.
+     * callback have finished.
      */
     TSharedPtr<Chunk_Generator> Self =
         AsShared();
@@ -67,14 +69,15 @@ void Chunk_Generator::GenerateAsync(
 
     Async(
         EAsyncExecution::ThreadPool,
+
         [
             Self,
                 CompletionCallback = MoveTemp(CompletionCallback)
         ]() mutable
         {
-            // ========================================================
-            // GENERATE VERTICES
-            // ========================================================
+            // ============================================================
+            // VERTICES
+            // ============================================================
 
             if (!Self->ShouldStop())
             {
@@ -82,9 +85,9 @@ void Chunk_Generator::GenerateAsync(
             }
 
 
-            // ========================================================
-            // GENERATE TRIANGLES
-            // ========================================================
+            // ============================================================
+            // TRIANGLES
+            // ============================================================
 
             if (!Self->ShouldStop())
             {
@@ -92,9 +95,9 @@ void Chunk_Generator::GenerateAsync(
             }
 
 
-            // ========================================================
-            // GENERATE NORMALS
-            // ========================================================
+            // ============================================================
+            // NORMALS
+            // ============================================================
 
             if (!Self->ShouldStop())
             {
@@ -102,29 +105,9 @@ void Chunk_Generator::GenerateAsync(
             }
 
 
-            // ========================================================
-            // GENERATE UVS
-            // ========================================================
-
-            if (!Self->ShouldStop())
-            {
-                Self->GenerateUVs();
-            }
-
-
-            // ========================================================
-            // GENERATE COLLISION
-            // ========================================================
-
-            if (!Self->ShouldStop())
-            {
-                Self->GenerateCollision();
-            }
-
-
-            // ========================================================
+            // ============================================================
             // FINISHED
-            // ========================================================
+            // ============================================================
 
             const bool bWasCancelled =
                 Self->ShouldStop();
@@ -137,17 +120,18 @@ void Chunk_Generator::GenerateAsync(
 
 
             /*
-             * We are currently on the worker thread.
-             *
-             * The callback must therefore be moved onto the
-             * Game Thread before anything UObject/Blueprint-related
-             * happens.
+             * Completion must happen on the Game Thread because
+             * the receiving code may interact with UObjects,
+             * ProceduralMeshComponent, Blueprint, etc.
              */
             AsyncTask(
                 ENamedThreads::GameThread,
+
                 [
                     Self,
-                        CompletionCallback = MoveTemp(CompletionCallback),
+                        CompletionCallback = MoveTemp(
+                            CompletionCallback
+                        ),
                         bWasCancelled
                 ]() mutable
                 {
@@ -202,7 +186,7 @@ bool Chunk_Generator::ShouldStop() const
 
 
 // ============================================================================
-// VERTICES
+// VERTICES + UVS
 // ============================================================================
 
 void Chunk_Generator::GenerateVertices()
@@ -213,17 +197,86 @@ void Chunk_Generator::GenerateVertices()
     }
 
 
+    // ========================================================================
+    // GRID SIZE
+    // ========================================================================
+
     const int32 VerticesPerSide =
         Resolution + 1;
 
 
     const int32 VertexCount =
-        VerticesPerSide * VerticesPerSide;
+        VerticesPerSide *
+        VerticesPerSide;
 
 
-    Vertices.Reserve(
+    // ========================================================================
+    // ALLOCATE EXACT SIZE
+    // ========================================================================
+
+    Vertices.SetNumUninitialized(
         VertexCount
     );
+
+
+    UV0.SetNumUninitialized(
+        VertexCount
+    );
+
+
+    // ========================================================================
+    // GRID SPACING
+    // ========================================================================
+
+    const float Step =
+        ChunkSize /
+        static_cast<float>(Resolution);
+
+
+    const float InverseResolution =
+        1.0f /
+        static_cast<float>(Resolution);
+
+
+    // ========================================================================
+    // CHUNK WORLD LOCATION
+    // ========================================================================
+    //
+    // ChunkCoordinate identifies the chunk.
+    //
+    // ChunkSize determines its physical position.
+    //
+    // Example:
+    //
+    // ChunkCoordinate = (3, -2)
+    //
+    // World position =
+    //
+    //     X = 3 * ChunkSize
+    //     Y = -2 * ChunkSize
+    //
+    // ========================================================================
+
+    const float ChunkWorldX =
+        static_cast<float>(
+            ChunkCoordinate.X
+            )
+        * ChunkSize;
+
+
+    const float ChunkWorldY =
+        static_cast<float>(
+            ChunkCoordinate.Y
+            )
+        * ChunkSize;
+
+
+    // ========================================================================
+    // GENERATE GRID
+    // ========================================================================
+
+    float WorldY =
+        ChunkWorldY;
 
 
     for (int32 Y = 0; Y <= Resolution; ++Y)
@@ -234,6 +287,15 @@ void Chunk_Generator::GenerateVertices()
         }
 
 
+        float WorldX =
+            ChunkWorldX;
+
+
+        const float V =
+            static_cast<float>(Y)
+            * InverseResolution;
+
+
         for (int32 X = 0; X <= Resolution; ++X)
         {
             if (ShouldStop())
@@ -242,48 +304,62 @@ void Chunk_Generator::GenerateVertices()
             }
 
 
-            const float AlphaX =
-                static_cast<float>(X) /
-                static_cast<float>(Resolution);
+            const int32 Index =
+                Y * VerticesPerSide + X;
 
 
-            const float AlphaY =
-                static_cast<float>(Y) /
-                static_cast<float>(Resolution);
+            const float U =
+                static_cast<float>(X)
+                * InverseResolution;
 
 
-            const float LocalX =
-                AlphaX * ChunkSize;
+            // ================================================================
+            // TERRAIN HEIGHT
+            // ================================================================
 
-
-            const float LocalY =
-                AlphaY * ChunkSize;
-
-
-            /*
-            * Ask the terrain system for the height.
-            */
-            const float Height = FNoise_Generator::GetHeight(
-                    LocalX + ChunkLocation.X,
-                    LocalY + ChunkLocation.Y,
-
-                    NoiseFrequency,
-                    NoiseOctaves,
-                    NoiseLacunarity,
-                    NoisePersistence,
-                    NoiseHeightScale
+            const float Height =
+                FNoise_Generator::GetHeight(
+                    WorldX,
+                    WorldY
                 );
 
 
-            Vertices.Add(
-                ChunkLocation +
+            // ================================================================
+            // VERTEX
+            // ================================================================
+
+            Vertices[Index] =
                 FVector(
-                    LocalX,
-                    LocalY,
+                    WorldX,
+                    WorldY,
                     Height
-                )
-            );
+                );
+
+
+            // ================================================================
+            // UV
+            // ================================================================
+
+            UV0[Index] =
+                FVector2D(
+                    U,
+                    V
+                );
+
+
+            // ================================================================
+            // NEXT X
+            // ================================================================
+
+            WorldX += Step;
         }
+
+
+        // ====================================================================
+        // NEXT Y
+        // ====================================================================
+
+        WorldY += Step;
     }
 }
 
@@ -300,17 +376,35 @@ void Chunk_Generator::GenerateTriangles()
     }
 
 
+    // ========================================================================
+    // GRID SIZE
+    // ========================================================================
+
     const int32 VerticesPerSide =
         Resolution + 1;
 
 
-    const int32 QuadCount =
-        Resolution * Resolution;
+    // ========================================================================
+    // EXACT TRIANGLE INDEX COUNT
+    // ========================================================================
+
+    const int32 TriangleIndexCount =
+        Resolution *
+        Resolution *
+        6;
 
 
-    Triangles.Reserve(
-        QuadCount * 6
+    Triangles.SetNumUninitialized(
+        TriangleIndexCount
     );
+
+
+    // ========================================================================
+    // WRITE INDEX BUFFER DIRECTLY
+    // ========================================================================
+
+    int32 Index =
+        0;
 
 
     for (int32 Y = 0; Y < Resolution; ++Y)
@@ -345,20 +439,32 @@ void Chunk_Generator::GenerateTriangles()
                 TopLeft + 1;
 
 
-            /*
-             * Triangle 1
-             */
-            Triangles.Add(BottomLeft);
-            Triangles.Add(TopLeft);
-            Triangles.Add(TopRight);
+            // =================================================================
+            // TRIANGLE 1
+            // =================================================================
+
+            Triangles[Index++] =
+                BottomLeft;
+
+            Triangles[Index++] =
+                TopLeft;
+
+            Triangles[Index++] =
+                TopRight;
 
 
-            /*
-             * Triangle 2
-             */
-            Triangles.Add(BottomLeft);
-            Triangles.Add(TopRight);
-            Triangles.Add(BottomRight);
+            // =================================================================
+            // TRIANGLE 2
+            // =================================================================
+
+            Triangles[Index++] =
+                BottomLeft;
+
+            Triangles[Index++] =
+                TopRight;
+
+            Triangles[Index++] =
+                BottomRight;
         }
     }
 }
@@ -376,97 +482,42 @@ void Chunk_Generator::GenerateNormals()
     }
 
 
-    Normals.SetNumZeroed(
+    const int32 VerticesPerSide =
+        Resolution + 1;
+
+
+    Normals.SetNumUninitialized(
         Vertices.Num()
     );
 
 
-    for (
-        int32 TriangleIndex = 0;
-        TriangleIndex < Triangles.Num();
-        TriangleIndex += 3
-        )
-    {
-        if (ShouldStop())
-        {
-            return;
-        }
+    // ========================================================================
+    // GRID SPACING
+    // ========================================================================
+
+    const float Step =
+        ChunkSize /
+        static_cast<float>(Resolution);
 
 
-        const int32 IndexA =
-            Triangles[TriangleIndex];
+    /*
+     * This is the Z component of the tangent-derived normal.
+     *
+     * For:
+     *
+     *     N = (-dH/dX, -dH/dY, 1)
+     *
+     * using central differences gives us:
+     *
+     *     (-dX, -dY, 2 * Step)
+     */
+    const float NormalZ =
+        2.0f * Step;
 
 
-        const int32 IndexB =
-            Triangles[TriangleIndex + 1];
-
-
-        const int32 IndexC =
-            Triangles[TriangleIndex + 2];
-
-
-        const FVector& A =
-            Vertices[IndexA];
-
-
-        const FVector& B =
-            Vertices[IndexB];
-
-
-        const FVector& C =
-            Vertices[IndexC];
-
-
-        const FVector EdgeA =
-            B - A;
-
-
-        const FVector EdgeB =
-            C - A;
-
-
-        const FVector Normal =
-            FVector::CrossProduct(
-                EdgeB,
-                EdgeA
-            );
-
-
-        Normals[IndexA] += Normal;
-        Normals[IndexB] += Normal;
-        Normals[IndexC] += Normal;
-    }
-
-
-    for (FVector& Normal : Normals)
-    {
-        if (ShouldStop())
-        {
-            return;
-        }
-
-
-        Normal.Normalize();
-    }
-}
-
-
-// ============================================================================
-// UVS
-// ============================================================================
-
-void Chunk_Generator::GenerateUVs()
-{
-    if (Resolution <= 0)
-    {
-        return;
-    }
-
-
-    UV0.Reserve(
-        Vertices.Num()
-    );
-
+    // ========================================================================
+    // CALCULATE NORMALS
+    // ========================================================================
 
     for (int32 Y = 0; Y <= Resolution; ++Y)
     {
@@ -484,55 +535,97 @@ void Chunk_Generator::GenerateUVs()
             }
 
 
-            const float U =
-                static_cast<float>(X) /
-                static_cast<float>(Resolution);
+            const int32 Index =
+                Y * VerticesPerSide + X;
 
 
-            const float V =
-                static_cast<float>(Y) /
-                static_cast<float>(Resolution);
+            // ================================================================
+            // NEIGHBOUR COORDINATES
+            // ================================================================
+
+            const int32 LeftX =
+                FMath::Max(
+                    X - 1,
+                    0
+                );
 
 
-            UV0.Add(
-                FVector2D(
-                    U,
-                    V
-                )
+            const int32 RightX =
+                FMath::Min(
+                    X + 1,
+                    Resolution
+                );
+
+
+            const int32 DownY =
+                FMath::Max(
+                    Y - 1,
+                    0
+                );
+
+
+            const int32 UpY =
+                FMath::Min(
+                    Y + 1,
+                    Resolution
+                );
+
+
+            // ================================================================
+            // NEIGHBOUR HEIGHTS
+            // ================================================================
+
+            const float HeightLeft =
+                Vertices[
+                    Y * VerticesPerSide + LeftX
+                ].Z;
+
+
+            const float HeightRight =
+                Vertices[
+                    Y * VerticesPerSide + RightX
+                ].Z;
+
+
+            const float HeightDown =
+                Vertices[
+                    DownY * VerticesPerSide + X
+                ].Z;
+
+
+            const float HeightUp =
+                Vertices[
+                    UpY * VerticesPerSide + X
+                ].Z;
+
+
+            // ================================================================
+            // CENTRAL DIFFERENCES
+            // ================================================================
+
+            const float DX =
+                HeightRight -
+                HeightLeft;
+
+
+            const float DY =
+                HeightUp -
+                HeightDown;
+
+
+            // ================================================================
+            // NORMAL
+            // ================================================================
+
+            FVector Normal(
+                -DX,
+                -DY,
+                NormalZ
             );
+
+
+            Normals[Index] =
+                Normal.GetSafeNormal();
         }
     }
-}
-
-
-// ============================================================================
-// COLLISION
-// ============================================================================
-
-void Chunk_Generator::GenerateCollision()
-{
-    if (ShouldStop())
-    {
-        return;
-    }
-
-
-    /*
-     * Temporary implementation:
-     * collision uses the same mesh as the render mesh.
-     *
-     * Later this can become a lower-resolution mesh.
-     */
-    CollisionVertices =
-        Vertices;
-
-
-    if (ShouldStop())
-    {
-        return;
-    }
-
-
-    CollisionTriangles =
-        Triangles;
 }
