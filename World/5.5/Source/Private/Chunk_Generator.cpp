@@ -351,6 +351,165 @@ void Chunk_Generator::GenerateVertices()
 
         }
     }
+
+    // ========================================================================
+    // SKIRT
+    // ========================================================================
+    //
+    // Only generate skirts for lower-resolution chunks.
+    //
+    // ========================================================================
+
+    if (Resolution >= 64)
+    {
+        return;
+    }
+
+
+    const float SkirtDepth =
+        TerrainConfig::HeightScale;
+
+
+    const int32 SkirtVerticesPerEdge =
+        VerticesPerSide;
+
+
+    const int32 SkirtStartIndex =
+        Vertices.Num();
+
+
+    const int32 SkirtVertexCount =
+        SkirtVerticesPerEdge * 4;
+
+
+    Vertices.AddUninitialized(
+        SkirtVertexCount
+    );
+
+
+    UV0.AddUninitialized(
+        SkirtVertexCount
+    );
+
+
+    // ========================================================================
+    // NORTH
+    // ========================================================================
+
+    for (int32 X = 0; X <= Resolution; ++X)
+    {
+        const int32 TerrainIndex =
+            Resolution * VerticesPerSide + X;
+
+
+        const int32 SkirtIndex =
+            SkirtStartIndex + X;
+
+
+        Vertices[SkirtIndex] =
+            Vertices[TerrainIndex];
+
+        Vertices[SkirtIndex].Z -=
+            SkirtDepth;
+
+
+        UV0[SkirtIndex] =
+            UV0[TerrainIndex];
+    }
+
+
+    // ========================================================================
+    // SOUTH
+    // ========================================================================
+
+    const int32 SouthStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge;
+
+
+    for (int32 X = 0; X <= Resolution; ++X)
+    {
+        const int32 TerrainIndex =
+            X;
+
+
+        const int32 SkirtIndex =
+            SouthStart + X;
+
+
+        Vertices[SkirtIndex] =
+            Vertices[TerrainIndex];
+
+        Vertices[SkirtIndex].Z -=
+            SkirtDepth;
+
+
+        UV0[SkirtIndex] =
+            UV0[TerrainIndex];
+    }
+
+
+    // ========================================================================
+    // WEST
+    // ========================================================================
+
+    const int32 WestStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 2;
+
+
+    for (int32 Y = 0; Y <= Resolution; ++Y)
+    {
+        const int32 TerrainIndex =
+            Y * VerticesPerSide;
+
+
+        const int32 SkirtIndex =
+            WestStart + Y;
+
+
+        Vertices[SkirtIndex] =
+            Vertices[TerrainIndex];
+
+        Vertices[SkirtIndex].Z -=
+            SkirtDepth;
+
+
+        UV0[SkirtIndex] =
+            UV0[TerrainIndex];
+    }
+
+
+    // ========================================================================
+    // EAST
+    // ========================================================================
+
+    const int32 EastStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 3;
+
+
+    for (int32 Y = 0; Y <= Resolution; ++Y)
+    {
+        const int32 TerrainIndex =
+            Y * VerticesPerSide
+            + Resolution;
+
+
+        const int32 SkirtIndex =
+            EastStart + Y;
+
+
+        Vertices[SkirtIndex] =
+            Vertices[TerrainIndex];
+
+        Vertices[SkirtIndex].Z -=
+            SkirtDepth;
+
+
+        UV0[SkirtIndex] =
+            UV0[TerrainIndex];
+    }
 }
 
 
@@ -456,6 +615,228 @@ void Chunk_Generator::GenerateTriangles()
             Triangles[Index++] =
                 BottomRight;
         }
+    }
+
+    // ========================================================================
+    // NO SKIRT
+    // ========================================================================
+
+    if (Resolution >= 64)
+    {
+        return;
+    }
+
+
+    // ========================================================================
+    // SKIRT INDEX INFORMATION
+    // ========================================================================
+
+    const int32 SkirtVerticesPerEdge =
+        VerticesPerSide;
+
+
+    const int32 SkirtStartIndex =
+        VerticesPerSide *
+        VerticesPerSide;
+
+    const int32 TriangleCount =
+        Resolution * 4 * 6;
+
+
+    Triangles.AddUninitialized(
+        TriangleCount
+    );
+
+
+    // ========================================================================
+    // NORTH
+    // ========================================================================
+
+    const int32 NorthStart =
+        SkirtStartIndex;
+
+
+    for (int32 X = 0; X < Resolution; ++X)
+    {
+        const int32 TerrainLeft =
+            Resolution * VerticesPerSide + X;
+
+
+        const int32 TerrainRight =
+            TerrainLeft + 1;
+
+
+        const int32 SkirtLeft =
+            NorthStart + X;
+
+
+        const int32 SkirtRight =
+            NorthStart + X + 1;
+
+
+        Triangles[Index++] =
+            TerrainLeft;
+
+        Triangles[Index++] =
+            SkirtLeft;
+
+        Triangles[Index++] =
+            SkirtRight;
+
+
+        Triangles[Index++] =
+            TerrainLeft;
+
+        Triangles[Index++] =
+            SkirtRight;
+
+        Triangles[Index++] =
+            TerrainRight;
+    }
+
+
+    // ========================================================================
+    // SOUTH
+    // ========================================================================
+
+    const int32 SouthStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge;
+
+
+    for (int32 X = 0; X < Resolution; ++X)
+    {
+        const int32 TerrainLeft =
+            X;
+
+
+        const int32 TerrainRight =
+            X + 1;
+
+
+        const int32 SkirtLeft =
+            SouthStart + X;
+
+
+        const int32 SkirtRight =
+            SouthStart + X + 1;
+
+
+        Triangles[Index++] =
+            TerrainLeft;
+
+        Triangles[Index++] =
+            SkirtRight;
+
+        Triangles[Index++] =
+            SkirtLeft;
+
+
+        Triangles[Index++] =
+            TerrainLeft;
+
+        Triangles[Index++] =
+            TerrainRight;
+
+        Triangles[Index++] =
+            SkirtRight;
+    }
+
+
+    // ========================================================================
+    // WEST
+    // ========================================================================
+
+    const int32 WestStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 2;
+
+
+    for (int32 Y = 0; Y < Resolution; ++Y)
+    {
+        const int32 TerrainBottom =
+            Y * VerticesPerSide;
+
+
+        const int32 TerrainTop =
+            TerrainBottom + VerticesPerSide;
+
+
+        const int32 SkirtBottom =
+            WestStart + Y;
+
+
+        const int32 SkirtTop =
+            WestStart + Y + 1;
+
+
+        Triangles[Index++] =
+            TerrainBottom;
+
+        Triangles[Index++] =
+            SkirtBottom;
+
+        Triangles[Index++] =
+            SkirtTop;
+
+
+        Triangles[Index++] =
+            TerrainBottom;
+
+        Triangles[Index++] =
+            SkirtTop;
+
+        Triangles[Index++] =
+            TerrainTop;
+    }
+
+
+    // ========================================================================
+    // EAST
+    // ========================================================================
+
+    const int32 EastStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 3;
+
+
+    for (int32 Y = 0; Y < Resolution; ++Y)
+    {
+        const int32 TerrainBottom =
+            Y * VerticesPerSide
+            + Resolution;
+
+
+        const int32 TerrainTop =
+            TerrainBottom + VerticesPerSide;
+
+
+        const int32 SkirtBottom =
+            EastStart + Y;
+
+
+        const int32 SkirtTop =
+            EastStart + Y + 1;
+
+
+        Triangles[Index++] =
+            TerrainBottom;
+
+        Triangles[Index++] =
+            SkirtTop;
+
+        Triangles[Index++] =
+            SkirtBottom;
+
+
+        Triangles[Index++] =
+            TerrainBottom;
+
+        Triangles[Index++] =
+            TerrainTop;
+
+        Triangles[Index++] =
+            SkirtTop;
     }
 }
 
@@ -568,5 +949,108 @@ void Chunk_Generator::GenerateNormals()
             Normals[Index] =
                 Normal.GetSafeNormal();
         }
+    }
+
+    // ========================================================================
+    // NO SKIRT
+    // ========================================================================
+
+    if (Resolution >= 64)
+    {
+        return;
+    }
+
+
+    // ========================================================================
+    // SKIRT NORMALS
+    // ========================================================================
+
+    const int32 SkirtVerticesPerEdge =
+        VerticesPerSide;
+
+
+    const int32 SkirtStartIndex = VerticesPerSide * VerticesPerSide;
+
+
+    // ========================================================================
+    // NORTH
+    // ========================================================================
+
+    for (int32 X = 0; X <= Resolution; ++X)
+    {
+        Normals[
+            SkirtStartIndex + X
+        ] =
+            FVector(
+                0.0f,
+                1.0f,
+                0.0f
+            );
+    }
+
+
+    // ========================================================================
+    // SOUTH
+    // ========================================================================
+
+    const int32 SouthStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge;
+
+
+    for (int32 X = 0; X <= Resolution; ++X)
+    {
+        Normals[
+            SouthStart + X
+        ] =
+            FVector(
+                0.0f,
+                -1.0f,
+                0.0f
+            );
+    }
+
+
+    // ========================================================================
+    // WEST
+    // ========================================================================
+
+    const int32 WestStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 2;
+
+
+    for (int32 Y = 0; Y <= Resolution; ++Y)
+    {
+        Normals[
+            WestStart + Y
+        ] =
+            FVector(
+                -1.0f,
+                0.0f,
+                0.0f
+            );
+    }
+
+
+    // ========================================================================
+    // EAST
+    // ========================================================================
+
+    const int32 EastStart =
+        SkirtStartIndex
+        + SkirtVerticesPerEdge * 3;
+
+
+    for (int32 Y = 0; Y <= Resolution; ++Y)
+    {
+        Normals[
+            EastStart + Y
+        ] =
+            FVector(
+                1.0f,
+                0.0f,
+                0.0f
+            );
     }
 }
