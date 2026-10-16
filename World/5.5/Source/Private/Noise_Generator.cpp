@@ -814,7 +814,7 @@ float FNoise_Generator::GetHeight(
 {
 
     WorldX *= 0.01f;
-    WorldY *= 0.01f;
+    WorldY *= -0.01f;
 
     // ========================================================================
     // CONTINENTALNESS
