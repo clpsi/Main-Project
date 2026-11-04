@@ -1,0 +1,230 @@
+
+#include "/Engine/Public/Platform.ush"
+
+// ============================================================
+// INPUT PARAMETERS
+// ============================================================
+
+uint2 OutputSize;
+
+float4 Coverage;
+float4 Density;
+
+float4 HumidityInfluence;
+float4 PressureInfluence;
+
+// Weather input
+
+Texture2D<float4> WeatherData;
+
+// Cloud output
+
+RWTexture2D<float4> OutputCloud;
+
+
+// ============================================================
+// GENERATE ONE CLOUD LAYER
+// ============================================================
+
+float GenerateCloudLayer(
+    float Pressure,
+    float Humidity,
+
+    float InCoverage,
+    float InDensity,
+
+    float InHumidityInfluence,
+    float InPressureInfluence
+)
+{
+    // --------------------------------------------------------
+    // 1. WEATHER INFLUENCE
+    // --------------------------------------------------------
+
+    float LowPressure = 1.0f - smoothstep(
+        0.2f,
+        0.7f,
+        Pressure
+    );
+
+    float MoistureFactor = lerp(
+        1.0f,
+        Humidity,
+        saturate(InHumidityInfluence)
+    );
+
+    float PressureFactor = lerp(
+        1.0f,
+        LowPressure,
+        saturate(InPressureInfluence)
+    );
+
+    float WeatherPotential = saturate(
+        MoistureFactor * PressureFactor
+    );
+
+
+    // --------------------------------------------------------
+    // 2. WEATHER ELIGIBILITY
+    // --------------------------------------------------------
+
+    // Weather determines where clouds can form.
+    // Coverage cannot override this condition.
+
+    float WeatherMask = smoothstep(
+        0.05f,
+        0.2f,
+        WeatherPotential
+    );
+
+
+    // --------------------------------------------------------
+    // 3. ADDITIONAL ARTISTIC COVERAGE
+    // --------------------------------------------------------
+
+    // Zero coverage = natural weather threshold.
+    // Higher coverage = more of the weather potential
+    // becomes visible as cloud coverage.
+
+    float SafeCoverage = saturate(InCoverage);
+
+    float CoverageThreshold = lerp(
+        0.55f,
+        0.15f,
+        SafeCoverage
+    );
+
+    float CoverageMask = smoothstep(
+        CoverageThreshold,
+        CoverageThreshold + 0.25f,
+        WeatherPotential
+    );
+
+
+    // --------------------------------------------------------
+    // 4. FINAL DENSITY
+    // --------------------------------------------------------
+
+    float Result =
+        WeatherMask *
+        CoverageMask *
+        max(InDensity, 0.0f);
+
+    return saturate(Result);
+}
+
+
+// ============================================================
+// MAIN COMPUTE SHADER
+// ============================================================
+
+[numthreads(8, 8, 1)]
+
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+    uint2 Pixel = DispatchThreadId.xy;
+
+    if (Pixel.x >= OutputSize.x ||
+        Pixel.y >= OutputSize.y)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // 1. GET WEATHER TEXTURE DIMENSIONS
+    // --------------------------------------------------------
+
+    uint WeatherWidth;
+    uint WeatherHeight;
+
+    WeatherData.GetDimensions(
+        WeatherWidth,
+        WeatherHeight
+    );
+
+
+    // --------------------------------------------------------
+    // 2. MAP OUTPUT PIXEL TO WEATHER PIXEL
+    // --------------------------------------------------------
+
+    float2 UV = (
+        float2(Pixel) + 0.5f
+    ) / float2(OutputSize);
+
+    uint2 WeatherPixel = min(
+        (uint2)(UV * float2(
+            WeatherWidth,
+            WeatherHeight
+        )),
+        uint2(
+            WeatherWidth - 1,
+            WeatherHeight - 1
+        )
+    );
+
+
+    // --------------------------------------------------------
+    // 3. READ WEATHER DATA
+    // --------------------------------------------------------
+
+    float4 Weather = WeatherData.Load(
+        int3(WeatherPixel, 0)
+    );
+
+    float Pressure = Weather.r;
+    float Humidity = Weather.a;
+
+
+    // --------------------------------------------------------
+    // 4. GENERATE FOUR INDEPENDENT LAYERS
+    // --------------------------------------------------------
+
+    float Layer1 = GenerateCloudLayer(
+        Pressure,
+        Humidity,
+        Coverage.x,
+        Density.x,
+        HumidityInfluence.x,
+        PressureInfluence.x
+    );
+
+    float Layer2 = GenerateCloudLayer(
+        Pressure,
+        Humidity,
+        Coverage.y,
+        Density.y,
+        HumidityInfluence.y,
+        PressureInfluence.y
+    );
+
+    float Layer3 = GenerateCloudLayer(
+        Pressure,
+        Humidity,
+        Coverage.z,
+        Density.z,
+        HumidityInfluence.z,
+        PressureInfluence.z
+    );
+
+    float Layer4 = GenerateCloudLayer(
+        Pressure,
+        Humidity,
+        Coverage.w,
+        Density.w,
+        HumidityInfluence.w,
+        PressureInfluence.w
+    );
+
+
+    // --------------------------------------------------------
+    // 5. WRITE CLOUD DATA
+    // --------------------------------------------------------
+
+    OutputCloud[Pixel] = float4(
+        Layer1,
+        Layer2,
+        Layer3,
+        Layer4
+    );
+}

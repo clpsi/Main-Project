@@ -1,0 +1,392 @@
+
+#include "/Engine/Public/Platform.ush"
+
+// ============================================================
+// INPUT PARAMETERS
+// ============================================================
+
+uint2 OutputSize;
+
+float2 WorldOrigin;
+float CellSize;
+
+float SimulationTime;
+float2 PatternVelocity;
+
+uint Seed;
+
+int BaseCells;
+int Octaves;
+
+float Persistence;
+
+// Wind parameters
+
+float WindStrength;
+float RotationStrength;
+float MaxWindStrength;
+
+// Storm parameters
+
+float GustStrength;
+float GustScale;
+
+// Output
+
+RWTexture2D<float4> OutputWeather;
+
+
+// ============================================================
+// HASH 32
+// ============================================================
+
+uint Hash32(uint X)
+{
+    X ^= X >> 16;
+    X *= 0x7FEB352Du;
+
+    X ^= X >> 15;
+    X *= 0x846CA68Bu;
+
+    X ^= X >> 16;
+
+    return X;
+}
+
+
+// ============================================================
+// HASH 2D
+// ============================================================
+
+uint Hash2D(int X, int Y, uint InSeed)
+{
+    uint H = InSeed;
+
+    H ^= (uint)X * 0x9E3779B9u;
+    H ^= (uint)Y * 0x85EBCA6Bu;
+
+    return Hash32(H);
+}
+
+
+// ============================================================
+// HASH NORMALIZED
+// ============================================================
+
+float Hash2DNormalized(int X, int Y, uint InSeed)
+{
+    uint Hash = Hash2D(X, Y, InSeed);
+
+    float Value = (float)Hash / 4294967295.0f;
+
+    return Value * 2.0f - 1.0f;
+}
+
+
+// ============================================================
+// FADE
+// ============================================================
+
+float Fade(float T)
+{
+    return T * T * T *
+        (T * (T * 6.0f - 15.0f) + 10.0f);
+}
+
+
+// ============================================================
+// LERP
+// ============================================================
+
+float LerpNoise(float A, float B, float T)
+{
+    return A + (B - A) * T;
+}
+
+
+// ============================================================
+// VALUE NOISE 2D
+// ============================================================
+
+float ValueNoise2D(
+    float X,
+    float Y,
+    uint InSeed
+)
+{
+    int X0 = (int)floor(X);
+    int Y0 = (int)floor(Y);
+
+    int X1 = X0 + 1;
+    int Y1 = Y0 + 1;
+
+    float FX = X - (float)X0;
+    float FY = Y - (float)Y0;
+
+    float SX = Fade(FX);
+    float SY = Fade(FY);
+
+    float V00 = Hash2DNormalized(X0, Y0, InSeed);
+    float V10 = Hash2DNormalized(X1, Y0, InSeed);
+    float V01 = Hash2DNormalized(X0, Y1, InSeed);
+    float V11 = Hash2DNormalized(X1, Y1, InSeed);
+
+    float Bottom = LerpNoise(V00, V10, SX);
+    float Top = LerpNoise(V01, V11, SX);
+
+    return LerpNoise(Bottom, Top, SY);
+}
+
+
+// ============================================================
+// FBM 2D
+// ============================================================
+
+float FBM2D(
+    float X,
+    float Y,
+    uint InSeed,
+    int InOctaves
+)
+{
+    float Total = 0.0f;
+
+    float Amplitude = 1.0f;
+    float AmplitudeSum = 0.0f;
+
+    int SafeOctaves = clamp(InOctaves, 0, 12);
+
+    for (int Octave = 0; Octave < SafeOctaves; ++Octave)
+    {
+        uint OctaveSeed =
+            InSeed + (uint)Octave * 1013u;
+
+        int Frequency = 1 << Octave;
+
+        Total += ValueNoise2D(
+            X * (float)Frequency,
+            Y * (float)Frequency,
+            OctaveSeed
+        ) * Amplitude;
+
+        AmplitudeSum += Amplitude;
+
+        Amplitude *= Persistence;
+    }
+
+    if (AmplitudeSum > 0.0f)
+    {
+        Total /= AmplitudeSum;
+    }
+
+    return Total;
+}
+
+
+// ============================================================
+// PRESSURE GENERATION
+// ============================================================
+
+float2 GetNoisePosition(float2 Position)
+{
+    float BaseFeatureSize =
+        (CellSize * (float)OutputSize.x)
+        / (float)BaseCells;
+
+    return Position / max(BaseFeatureSize, 0.000001f);
+}
+
+
+float GeneratePressure(float2 Position)
+{
+    float2 MovingPosition =
+        Position - PatternVelocity * SimulationTime;
+
+    float2 NoisePosition =
+        GetNoisePosition(MovingPosition);
+
+    float RawPressure = FBM2D(
+        NoisePosition.x,
+        NoisePosition.y,
+        Seed,
+        Octaves
+    );
+
+    return saturate(RawPressure * 0.5f + 0.5f);
+}
+
+// ============================================================
+// HUMIDITY GENERATION
+// ============================================================
+
+float GenerateHumidity(float2 Position)
+{
+    float2 MovingPosition =
+        Position - PatternVelocity * SimulationTime;
+
+    float2 NoisePosition =
+        GetNoisePosition(MovingPosition);
+
+    uint HumiditySeed =
+        Seed ^ 0xA511E9B3u;
+
+    float RawHumidity = FBM2D(
+        NoisePosition.x,
+        NoisePosition.y,
+        HumiditySeed,
+        Octaves
+    );
+
+    return saturate(RawHumidity * 0.5f + 0.5f);
+}
+
+
+// ============================================================
+// PROCEDURAL GUST
+// ============================================================
+
+float2 GenerateGust(float2 Position)
+{
+    float2 P = Position * GustScale;
+
+    float2 Gust;
+
+    Gust.x = sin(
+        P.x * 1.73f +
+        P.y * 0.91f +
+        SimulationTime * 0.7f
+    );
+
+    Gust.y = cos(
+        P.x * 0.83f -
+        P.y * 1.61f +
+        SimulationTime * 0.53f
+    );
+
+    return Gust;
+}
+
+
+// ============================================================
+// MAIN COMPUTE SHADER
+// ============================================================
+
+[numthreads(8, 8, 1)]
+
+void MainCS(uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+    uint2 Pixel = DispatchThreadId.xy;
+
+    if (Pixel.x >= OutputSize.x ||
+        Pixel.y >= OutputSize.y)
+    {
+        return;
+    }
+
+    // --------------------------------------------------------
+    // 1. WORLD POSITION
+    // --------------------------------------------------------
+
+    float2 Position =
+        WorldOrigin +
+        (float2(Pixel) + 0.5f) * CellSize;
+
+
+    // --------------------------------------------------------
+    // 2. PRESSURE & HUMIDITY
+    // --------------------------------------------------------
+
+    float Pressure = GeneratePressure(Position);
+    float Humidity = GenerateHumidity(Position);
+
+
+    // --------------------------------------------------------
+    // 3. PRESSURE GRADIENT
+    // --------------------------------------------------------
+
+    float SafeCellSize = max(CellSize, 0.000001f);
+
+    float PressureLeft = GeneratePressure(
+        Position - float2(SafeCellSize, 0.0f)
+    );
+
+    float PressureRight = GeneratePressure(
+        Position + float2(SafeCellSize, 0.0f)
+    );
+
+    float PressureDown = GeneratePressure(
+        Position - float2(0.0f, SafeCellSize)
+    );
+
+    float PressureUp = GeneratePressure(
+        Position + float2(0.0f, SafeCellSize)
+    );
+
+    float2 Gradient = float2(
+        (PressureRight - PressureLeft) /
+            (2.0f * SafeCellSize),
+
+        (PressureUp - PressureDown) /
+            (2.0f * SafeCellSize)
+    );
+
+
+    // --------------------------------------------------------
+    // 4. BASE WIND
+    // --------------------------------------------------------
+
+    float2 Wind = -Gradient * WindStrength;
+
+
+    // --------------------------------------------------------
+    // 5. ROTATIONAL WIND
+    // --------------------------------------------------------
+
+    float2 RotationalWind = float2(
+        -Gradient.y,
+         Gradient.x
+    );
+
+    Wind +=
+        RotationalWind *
+        WindStrength *
+        RotationStrength;
+
+
+    // --------------------------------------------------------
+    // 7. PROCEDURAL GUSTS
+    // --------------------------------------------------------
+
+    float2 Gust = GenerateGust(Position);
+
+    Wind += Gust *
+        GustStrength;
+
+
+    // --------------------------------------------------------
+    // 8. ENCODE WIND
+    // --------------------------------------------------------
+
+    float SafeMaxWind = max(MaxWindStrength, 0.0001f);
+
+    float2 NormalizedWind = clamp(
+        Wind / SafeMaxWind,
+        -1.0f,
+        1.0f
+    );
+
+    float2 EncodedWind =
+        NormalizedWind * 0.5f + 0.5f;
+
+
+    // --------------------------------------------------------
+    // 9. WRITE COMBINED WEATHER DATA
+    // --------------------------------------------------------
+
+    OutputWeather[Pixel] = float4(
+        Pressure,
+        EncodedWind.x,
+        EncodedWind.y,
+        Humidity
+    );
+}
