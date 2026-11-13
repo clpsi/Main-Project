@@ -187,6 +187,25 @@ float FBM2D(
 // PRESSURE GENERATION
 // ============================================================
 
+float2 GetMovingPosition(float2 Position)
+{
+    float MovementScale = 0.01f; //param later?
+    float2 MapSize = float2(
+        CellSize * OutputSize.x,
+        CellSize * OutputSize.y
+    );
+
+    float2 NormalizedVelocity = PatternVelocity;
+
+    float2 WorldOffset =
+        NormalizedVelocity *
+        MapSize *
+        MovementScale *
+        SimulationTime;
+
+    return Position - WorldOffset;
+}
+
 float2 GetNoisePosition(float2 Position)
 {
     float BaseFeatureSize =
@@ -196,11 +215,10 @@ float2 GetNoisePosition(float2 Position)
     return Position / max(BaseFeatureSize, 0.000001f);
 }
 
-
 float GeneratePressure(float2 Position)
 {
     float2 MovingPosition =
-        Position - PatternVelocity * SimulationTime;
+        GetMovingPosition(Position);
 
     float2 NoisePosition =
         GetNoisePosition(MovingPosition);
@@ -222,7 +240,7 @@ float GeneratePressure(float2 Position)
 float GenerateHumidity(float2 Position)
 {
     float2 MovingPosition =
-        Position - PatternVelocity * SimulationTime;
+        GetMovingPosition(Position);
 
     float2 NoisePosition =
         GetNoisePosition(MovingPosition);
