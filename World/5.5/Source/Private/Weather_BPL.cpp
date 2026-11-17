@@ -194,11 +194,12 @@ void UWeatherBPL::DispatchCloudGeneration(
     UTextureRenderTarget2D* WeatherData,
     UTextureRenderTarget2D* Output,
 
-    FLinearColor Coverage,
-    FLinearColor Density,
 
     FLinearColor HumidityInfluence,
-    FLinearColor PressureInfluence
+    FLinearColor PressureInfluence,
+
+    FLinearColor AdditionalCoverage,
+    FLinearColor AdditionalDensity
 )
 {
     // ========================================================
@@ -237,17 +238,17 @@ void UWeatherBPL::DispatchCloudGeneration(
     // ========================================================
 
     const FVector4f SafeCoverage(
-        Coverage.R,
-        Coverage.G,
-        Coverage.B,
-        Coverage.A
+        AdditionalCoverage.R,
+        AdditionalCoverage.G,
+        AdditionalCoverage.B,
+        AdditionalCoverage.A
     );
 
     const FVector4f SafeDensity(
-        Density.R,
-        Density.G,
-        Density.B,
-        Density.A
+        AdditionalDensity.R,
+        AdditionalDensity.G,
+        AdditionalDensity.B,
+        AdditionalDensity.A
     );
 
     const FVector4f SafeHumidityInfluence(
