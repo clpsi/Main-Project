@@ -44,11 +44,12 @@ public:
         UTextureRenderTarget2D* WeatherData,
         UTextureRenderTarget2D* Output,
 
-        FLinearColor Coverage,
-        FLinearColor Density,
 
         FLinearColor HumidityInfluence,
-        FLinearColor PressureInfluence
+        FLinearColor PressureInfluence,
+
+        FLinearColor AdditionalCoverage,
+        FLinearColor AdditionalDensity
     );
 
 };
