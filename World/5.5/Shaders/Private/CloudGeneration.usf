@@ -108,7 +108,7 @@ float GenerateCloudLayer(
     float Result =
         WeatherMask *
         CoverageMask *
-        max(InDensity, 0.0f);
+        (1.0f + InDensity);
 
     return saturate(Result);
 }
