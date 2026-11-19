@@ -39,6 +39,8 @@ float GenerateCloudLayer(
 {
     // --------------------------------------------------------
     // 1. WEATHER INFLUENCE
+    // Low pressure encourages cloud formation.
+    // High pressure suppresses cloud formation.
     // --------------------------------------------------------
 
     float LowPressure = 1.0f - smoothstep(
